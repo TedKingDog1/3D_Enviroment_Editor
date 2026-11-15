@@ -187,3 +187,18 @@ button { font: inherit; color: inherit; cursor: pointer; }
   outline: 1px solid #e5b85c;
   background: #51452e;
 }
+
+
+/* World Settings controls */
+.setting-toggle {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.setting-toggle span {
+  color: #8993a2;
+  font-size: 11px;
+}
+.setting-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #d2b16d;
+}
