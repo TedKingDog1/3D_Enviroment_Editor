@@ -17,6 +17,8 @@ interface Entity {
 const viewport = document.querySelector<HTMLDivElement>('#viewport')!;
 const objectList = document.querySelector<HTMLDivElement>('#object-list')!;
 const properties = document.querySelector<HTMLDivElement>('#properties')!;
+const inspectorHeading = document.querySelector<HTMLDivElement>('#inspector-heading')!;
+let showingWorldSettings = false;
 const cameraStatus = document.querySelector<HTMLSpanElement>('#camera-status')!;
 const selectionStatus = document.querySelector<HTMLSpanElement>('#selection-status')!;
 
@@ -37,7 +39,15 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1;
 viewport.appendChild(renderer.domElement);
 
-scene.add(new THREE.HemisphereLight(0xdceaff, 0x46505b, 2));
+const ambientLight = new THREE.HemisphereLight(0xdceaff, 0x46505b, 2);
+scene.add(ambientLight);
+
+const fogSettings = {
+  enabled: true,
+  color: '#8295a8',
+  near: 45,
+  far: 150
+};
 
 const sunlight = new THREE.DirectionalLight(0xffedcf, 3);
 sunlight.position.set(12, 20, 8);
@@ -393,7 +403,154 @@ function vectorFields(label: string, property: 'position' | 'rotation' | 'scale'
     </div>`;
 }
 
+
+function updateFog() {
+  if (fogSettings.enabled) {
+    scene.fog = new THREE.Fog(
+      fogSettings.color,
+      fogSettings.near,
+      Math.max(fogSettings.near + 0.1, fogSettings.far)
+    );
+  } else {
+    scene.fog = null;
+  }
+}
+
+function refreshWorldSettings() {
+  const background = scene.background instanceof THREE.Color
+    ? `#${scene.background.getHexString()}`
+    : '#8295a8';
+
+  properties.innerHTML = `
+    <div class="property-group">
+      <h3>BACKGROUND</h3>
+      <div class="property-row material-row">
+        <label>Color</label>
+        <input id="world-background" type="color" value="${background}">
+      </div>
+      <p class="muted">Set this to black for a dark void.</p>
+    </div>
+
+    <div class="property-group">
+      <h3>ATMOSPHERE / FOG</h3>
+      <label class="property-row setting-toggle">
+        <span>Enable Fog</span>
+        <input id="fog-enabled" type="checkbox" ${fogSettings.enabled ? 'checked' : ''}>
+      </label>
+      <div class="property-row material-row">
+        <label>Fog Color</label>
+        <input id="fog-color" type="color" value="${fogSettings.color}">
+      </div>
+      <div class="property-row material-row">
+        <label>Near Distance</label>
+        <input id="fog-near" type="number" min="0" step="1" value="${fogSettings.near}">
+      </div>
+      <div class="property-row material-row">
+        <label>Far Distance</label>
+        <input id="fog-far" type="number" min="0.1" step="1" value="${fogSettings.far}">
+      </div>
+    </div>
+
+    <div class="property-group">
+      <h3>WORLD SUN</h3>
+      <label class="property-row setting-toggle">
+        <span>Enable Sun</span>
+        <input id="sun-enabled" type="checkbox" ${sunlight.visible ? 'checked' : ''}>
+      </label>
+      <div class="property-row material-row">
+        <label>Color</label>
+        <input id="sun-color" type="color" value="#${sunlight.color.getHexString()}">
+      </div>
+      <div class="property-row material-row">
+        <label>Intensity</label>
+        <input id="sun-intensity" type="number" min="0" step="0.1" value="${sunlight.intensity}">
+      </div>
+    </div>
+
+    <div class="property-group">
+      <h3>AMBIENT / SKY LIGHT</h3>
+      <div class="property-row material-row">
+        <label>Sky Color</label>
+        <input id="ambient-sky-color" type="color" value="#${ambientLight.color.getHexString()}">
+      </div>
+      <div class="property-row material-row">
+        <label>Ground Color</label>
+        <input id="ambient-ground-color" type="color" value="#${ambientLight.groundColor.getHexString()}">
+      </div>
+      <div class="property-row material-row">
+        <label>Intensity</label>
+        <input id="ambient-intensity" type="number" min="0" step="0.1" value="${ambientLight.intensity}">
+      </div>
+    </div>
+  `;
+
+  properties.querySelector<HTMLInputElement>('#world-background')?.addEventListener('input', event => {
+    scene.background = new THREE.Color((event.target as HTMLInputElement).value);
+  });
+
+  properties.querySelector<HTMLInputElement>('#fog-enabled')?.addEventListener('change', event => {
+    fogSettings.enabled = (event.target as HTMLInputElement).checked;
+    updateFog();
+  });
+
+  properties.querySelector<HTMLInputElement>('#fog-color')?.addEventListener('input', event => {
+    fogSettings.color = (event.target as HTMLInputElement).value;
+    updateFog();
+  });
+
+  properties.querySelector<HTMLInputElement>('#fog-near')?.addEventListener('change', event => {
+    fogSettings.near = Math.max(0, Number((event.target as HTMLInputElement).value));
+    fogSettings.far = Math.max(fogSettings.near + 0.1, fogSettings.far);
+    updateFog();
+    refreshWorldSettings();
+  });
+
+  properties.querySelector<HTMLInputElement>('#fog-far')?.addEventListener('change', event => {
+    fogSettings.far = Math.max(fogSettings.near + 0.1, Number((event.target as HTMLInputElement).value));
+    updateFog();
+    refreshWorldSettings();
+  });
+
+  properties.querySelector<HTMLInputElement>('#sun-enabled')?.addEventListener('change', event => {
+    sunlight.visible = (event.target as HTMLInputElement).checked;
+  });
+
+  properties.querySelector<HTMLInputElement>('#sun-color')?.addEventListener('input', event => {
+    sunlight.color.set((event.target as HTMLInputElement).value);
+  });
+
+  properties.querySelector<HTMLInputElement>('#sun-intensity')?.addEventListener('change', event => {
+    sunlight.intensity = Math.max(0, Number((event.target as HTMLInputElement).value));
+  });
+
+  properties.querySelector<HTMLInputElement>('#ambient-sky-color')?.addEventListener('input', event => {
+    ambientLight.color.set((event.target as HTMLInputElement).value);
+  });
+
+  properties.querySelector<HTMLInputElement>('#ambient-ground-color')?.addEventListener('input', event => {
+    ambientLight.groundColor.set((event.target as HTMLInputElement).value);
+  });
+
+  properties.querySelector<HTMLInputElement>('#ambient-intensity')?.addEventListener('change', event => {
+    ambientLight.intensity = Math.max(0, Number((event.target as HTMLInputElement).value));
+  });
+}
+
+document.querySelector<HTMLButtonElement>('#world-settings-button')!
+  .addEventListener('click', () => {
+    showingWorldSettings = !showingWorldSettings;
+
+    if (showingWorldSettings) {
+      inspectorHeading.textContent = 'WORLD SETTINGS';
+      refreshWorldSettings();
+    } else {
+      inspectorHeading.textContent = 'PROPERTIES';
+      refreshProperties();
+    }
+  });
+
 function refreshProperties() {
+  if (showingWorldSettings) return;
   if (!selected) {
     properties.innerHTML = '<p class="muted">Select an object to edit its properties.</p>';
     return;
@@ -685,6 +842,22 @@ renderer.domElement.addEventListener('click', event => {
 document.querySelector<HTMLButtonElement>('#save-button')!.addEventListener('click', () => {
   const world = {
     name: 'Untitled World',
+    settings: {
+      backgroundColor: scene.background instanceof THREE.Color
+        ? `#${scene.background.getHexString()}`
+        : '#8295a8',
+      fog: { ...fogSettings },
+      sun: {
+        enabled: sunlight.visible,
+        color: `#${sunlight.color.getHexString()}`,
+        intensity: sunlight.intensity
+      },
+      ambient: {
+        skyColor: `#${ambientLight.color.getHexString()}`,
+        groundColor: `#${ambientLight.groundColor.getHexString()}`,
+        intensity: ambientLight.intensity
+      }
+    },
     objects: entities.map(entity => {
       const object = entity.object;
       const data: any = {
@@ -701,6 +874,8 @@ document.querySelector<HTMLButtonElement>('#save-button')!.addEventListener('cli
         data.roughness = material.roughness;
         data.metalness = material.metalness;
         data.textureApplied = Boolean(material.map);
+        data.lightTransmissionEnabled = Boolean(entity.lightTransmissionEnabled);
+        data.shadowExcludedLights = [...(entity.shadowExcludedLights ?? [])].map(light => light.name);
       }
 
       if (entity.kind.includes('Light')) {
