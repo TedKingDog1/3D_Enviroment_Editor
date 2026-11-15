@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Creation Environment Studio</title>
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand">✦ CREATION <span>ENVIRONMENT STUDIO</span></div>
+      <div class="top-actions">
+        <span class="world-name">WORLD: <b>Untitled World</b></span>
+        <button id="delete-button">Delete Selected</button>
+          <button id="save-button">Save World</button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="outliner panel">
+        <div class="panel-heading">WORLD OUTLINER</div>
+        <div id="object-list"></div>
+      </aside>
+
+      <section class="viewport-area">
+        <div class="viewport-toolbar">
+          <button data-tool="translate" class="tool active">Move</button>
+          <button data-tool="rotate" class="tool">Rotate</button>
+          <button data-tool="scale" class="tool">Scale</button>
+          <button id="preview-camera" class="tool">Preview Camera</button>
+          <span class="viewport-hint">Right-click to fly · WASD · Q/E · Shift</span>
+        </div>
+        <div id="viewport"></div>
+        <div class="viewport-footer">
+          <span id="camera-status">CAMERA: FREE</span>
+          <span id="selection-status">NO OBJECT SELECTED</span>
+        </div>
+      </section>
+
+      <aside class="inspector panel">
+        <div class="panel-heading">PROPERTIES</div>
+        <div id="properties">
+          <p class="muted">Select an object to edit its properties.</p>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="asset-panel">
+      <div class="asset-heading">CREATE OBJECT</div>
+      <div class="asset-buttons">
+        <button data-add="box">＋ Cube</button>
+        <button data-add="sphere">＋ Sphere</button>
+        <button data-add="cylinder">＋ Cylinder</button>
+        <button data-add="plane">＋ Plane</button>
+        <button data-add="pointLight">＋ Point Light</button>
+        <button data-add="directionalLight">＋ Sun Light</button>
+        <button data-add="spotLight">＋ Spotlight</button>
+        <button data-add="camera">＋ Camera</button>
+        <label class="file-button">＋ Texture
+          <input id="texture-file" type="file" accept="image/*" hidden />
+        </label>
+      </div>
+      <span class="asset-note">Select an object to edit its properties.</span>
+    </footer>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
