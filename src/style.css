@@ -347,3 +347,185 @@ html[data-theme="system"] { color-scheme: dark; }
   .settings-content { padding: 4px 16px; }
   .settings-header, .settings-footer { padding: 16px; }
 }
+
+
+/* Accessible semantic button and control colors */
+:root {
+  --danger-bg: #482b30;
+  --danger-border: #96545d;
+  --danger-text: #ffe8ea;
+  --danger-hover: #66363e;
+  --control-bg: #292e39;
+  --control-border: #424958;
+  --control-text: #e5e7eb;
+}
+#delete-button {
+  background: var(--danger-bg);
+  border-color: var(--danger-border);
+  color: var(--danger-text);
+}
+#delete-button:hover {
+  background: var(--danger-hover);
+  color: #ffffff;
+}
+.primary-button, #create-project-button {
+  color: #171717;
+  font-weight: 700;
+}
+button:disabled, input:disabled, select:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+/* Light theme: explicit semantic colors, not simple dark-mode inversion */
+html[data-theme="light"] {
+  --danger-bg: #fee2e2;
+  --danger-border: #fca5a5;
+  --danger-text: #991b1b;
+  --danger-hover: #fecaca;
+  --control-bg: #f3f5f8;
+  --control-border: #cbd3de;
+  --control-text: #202733;
+}
+html[data-theme="light"] #delete-button,
+html[data-theme="system"] #delete-button {
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  color: var(--danger-text);
+}
+html[data-theme="light"] #delete-button:hover,
+html[data-theme="system"] #delete-button:hover {
+  background: var(--danger-hover);
+  color: #7f1d1d;
+}
+html[data-theme="light"] .top-actions button,
+html[data-theme="light"] .asset-buttons button,
+html[data-theme="light"] .file-button,
+html[data-theme="light"] .tool,
+html[data-theme="light"] .secondary-button,
+html[data-theme="system"] .top-actions button,
+html[data-theme="system"] .asset-buttons button,
+html[data-theme="system"] .file-button,
+html[data-theme="system"] .tool,
+html[data-theme="system"] .secondary-button {
+  background: var(--control-bg);
+  color: var(--control-text);
+  border-color: var(--control-border);
+}
+html[data-theme="light"] .top-actions button:hover,
+html[data-theme="light"] .asset-buttons button:hover,
+html[data-theme="light"] .file-button:hover,
+html[data-theme="light"] .tool:hover,
+html[data-theme="light"] .secondary-button:hover,
+html[data-theme="system"] .top-actions button:hover,
+html[data-theme="system"] .asset-buttons button:hover,
+html[data-theme="system"] .file-button:hover,
+html[data-theme="system"] .tool:hover,
+html[data-theme="system"] .secondary-button:hover {
+  background: #e2e7ee;
+  color: #172033;
+}
+html[data-theme="light"] .tool.active,
+html[data-theme="system"] .tool.active {
+  background: color-mix(in srgb, var(--accent) 28%, #ffffff);
+  border-color: color-mix(in srgb, var(--accent) 65%, #64748b);
+  color: #202733;
+}
+html[data-theme="light"] .wide-button,
+html[data-theme="system"] .wide-button {
+  background: #e5eaf1;
+  border-color: #9aa8ba;
+  color: #202733;
+}
+html[data-theme="light"] .wide-button:hover,
+html[data-theme="system"] .wide-button:hover {
+  background: #d5dde8;
+}
+html[data-theme="light"] .object-entry:hover,
+html[data-theme="system"] .object-entry:hover {
+  background: #e8edf3;
+}
+html[data-theme="light"] .object-entry.selected,
+html[data-theme="system"] .object-entry.selected {
+  background: #dce5f1;
+  color: #172033;
+}
+html[data-theme="light"] .muted,
+html[data-theme="system"] .muted {
+  color: #536174;
+}
+html[data-theme="light"] .panel-heading,
+html[data-theme="light"] .asset-heading,
+html[data-theme="system"] .panel-heading,
+html[data-theme="system"] .asset-heading {
+  color: #485568;
+}
+html[data-theme="light"] .property-row label,
+html[data-theme="system"] .property-row label {
+  color: #536174;
+}
+html[data-theme="light"] .property-group h3,
+html[data-theme="system"] .property-group h3 {
+  color: #435166;
+}
+html[data-theme="light"] .viewport-footer,
+html[data-theme="system"] .viewport-footer {
+  color: #536174;
+}
+html[data-theme="light"] .world-name,
+html[data-theme="system"] .world-name {
+  color: #536174;
+}
+html[data-theme="light"] .world-name b,
+html[data-theme="system"] .world-name b {
+  color: #202733;
+}
+html[data-theme="light"] .save-status,
+html[data-theme="system"] .save-status {
+  color: #79530a;
+}
+html[data-theme="light"] .asset-note,
+html[data-theme="system"] .asset-note {
+  color: #536174;
+}
+html[data-theme="light"] .property-row input,
+html[data-theme="light"] .new-project-row input,
+html[data-theme="light"] .settings-field select,
+html[data-theme="light"] .accent-editor input[type="text"],
+html[data-theme="light"] .keybinding-row button,
+html[data-theme="system"] .property-row input,
+html[data-theme="system"] .new-project-row input,
+html[data-theme="system"] .settings-field select,
+html[data-theme="system"] .accent-editor input[type="text"],
+html[data-theme="system"] .keybinding-row button {
+  background: #ffffff;
+  color: #202733;
+  border-color: #9aa8ba;
+}
+html[data-theme="light"] .primary-button,
+html[data-theme="light"] #create-project-button,
+html[data-theme="system"] .primary-button,
+html[data-theme="system"] #create-project-button {
+  background: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 72%, #202733);
+  color: #171717;
+}
+html[data-theme="light"] .project-card-actions .project-delete,
+html[data-theme="system"] .project-card-actions .project-delete {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #991b1b;
+}
+html[data-theme="light"] .project-card-actions .project-delete:hover,
+html[data-theme="system"] .project-card-actions .project-delete:hover {
+  background: #fecaca;
+  color: #7f1d1d;
+}
+html[data-theme="light"] .accent-presets button,
+html[data-theme="system"] .accent-presets button {
+  border-color: #64748b;
+}
+html[data-theme="light"] :focus-visible,
+html[data-theme="system"] :focus-visible {
+  outline-color: #1d4ed8;
+}
