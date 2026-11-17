@@ -634,3 +634,17 @@ html[data-theme="system"] :focus-visible {
     color: #ffffff;
   }
 }
+
+
+/* Terrain sculpting controls */
+.terrain-toolbar{position:absolute;z-index:8;top:48px;left:12px;display:flex;align-items:center;flex-wrap:wrap;gap:10px;max-width:calc(100% - 24px);padding:10px 12px;border:1px solid var(--panel-border);border-radius:8px;background:var(--panel-bg);color:var(--ui-text);box-shadow:0 8px 28px rgba(0,0,0,.24)}
+.terrain-toolbar-title{display:grid;gap:3px;margin-right:5px}
+.terrain-toolbar-title strong{color:var(--accent);font-size:10px;letter-spacing:1px}
+.terrain-toolbar-title span{color:var(--muted-text);font-size:10px}
+.terrain-mode-buttons{display:flex;gap:5px}
+.terrain-mode-buttons .tool{padding:7px 9px}
+.terrain-slider{display:flex;align-items:center;gap:7px;color:var(--ui-text);font-size:10px}
+.terrain-slider input{width:90px;accent-color:var(--accent)}
+.terrain-slider b{min-width:30px;color:var(--accent);font-variant-numeric:tabular-nums}
+#viewport{touch-action:none}
+@media(max-width:900px){.terrain-toolbar{right:8px;left:8px;gap:7px}.terrain-toolbar-title{width:100%}.terrain-slider input{width:70px}}
