@@ -92,6 +92,7 @@ const entities: Entity[] = [];
 let selected: Entity | null = null;
 
 const defaultSunEntity: Entity = {
+  id: 'world-sun',
   object: sunlight,
   kind: 'directionalLight',
   name: 'World Sun',
