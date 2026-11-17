@@ -36,7 +36,79 @@ const projectListElement = document.querySelector<HTMLDivElement>('#project-list
 const projectNameInput = document.querySelector<HTMLInputElement>('#new-project-name')!;
 const currentProjectName = document.querySelector<HTMLElement>('#current-project-name')!;
 const saveStatus = document.querySelector<HTMLSpanElement>('#save-status')!;
+
 let currentProject: StoredProject | null = null;
+
+type AppPreferences = {
+  theme: 'dark' | 'light' | 'system';
+  accent: string;
+  density: 'comfortable' | 'compact';
+  keybindings: { delete: string; move: string; rotate: string; scale: string };
+};
+const defaultPreferences: AppPreferences = {
+  theme: 'dark',
+  accent: '#d2b16d',
+  density: 'comfortable',
+  keybindings: { delete: 'Delete', move: 'KeyG', rotate: 'KeyR', scale: 'KeyS' }
+};
+let preferences: AppPreferences = (() => {
+  try {
+    const saved = localStorage.getItem('ces-app-preferences');
+    if (!saved) return structuredClone(defaultPreferences);
+    const parsed = JSON.parse(saved) as Partial<AppPreferences>;
+    return {
+      ...defaultPreferences,
+      ...parsed,
+      keybindings: { ...defaultPreferences.keybindings, ...parsed.keybindings }
+    };
+  } catch {
+    return structuredClone(defaultPreferences);
+  }
+})();
+let capturingKeybinding: keyof AppPreferences['keybindings'] | null = null;
+
+function savePreferences() {
+  localStorage.setItem('ces-app-preferences', JSON.stringify(preferences));
+}
+
+function applyPreferences() {
+  document.documentElement.dataset.theme = preferences.theme;
+  document.documentElement.dataset.density = preferences.density;
+  document.documentElement.style.setProperty('--accent', preferences.accent);
+  const accent = document.querySelector<HTMLInputElement>('#accent-color');
+  const accentHex = document.querySelector<HTMLInputElement>('#accent-hex');
+  const theme = document.querySelector<HTMLSelectElement>('#theme-select');
+  const density = document.querySelector<HTMLSelectElement>('#density-select');
+  if (accent) accent.value = preferences.accent;
+  if (accentHex) accentHex.value = preferences.accent.toUpperCase();
+  if (theme) theme.value = preferences.theme;
+  if (density) density.value = preferences.density;
+  document.querySelectorAll<HTMLButtonElement>('[data-keybinding]').forEach(button => {
+    const action = button.dataset.keybinding as keyof AppPreferences['keybindings'];
+    button.textContent = capturingKeybinding === action
+      ? 'Press a key…'
+      : formatKeybinding(preferences.keybindings[action]);
+    button.classList.toggle('listening', capturingKeybinding === action);
+  });
+}
+
+function formatKeybinding(code: string) {
+  return code.replace(/^Key/, '').replace(/^Digit/, '').replace('Delete', 'Del')
+    .replace('Backspace', 'Backspace').replace('Space', 'Space')
+    .replace('ArrowUp', '↑').replace('ArrowDown', '↓')
+    .replace('ArrowLeft', '←').replace('ArrowRight', '→');
+}
+
+function openSettings() {
+  document.querySelector<HTMLDivElement>('#settings-panel')!.classList.add('visible');
+  applyPreferences();
+}
+function closeSettings() {
+  document.querySelector<HTMLDivElement>('#settings-panel')!.classList.remove('visible');
+  capturingKeybinding = null;
+  applyPreferences();
+}
+
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x8295a8);
@@ -375,13 +447,42 @@ document.querySelector<HTMLButtonElement>('#delete-button')!
   .addEventListener('click', deleteSelected);
 
 document.addEventListener('keydown', event => {
-  if (
-    (event.code === 'Delete' || event.code === 'Backspace') &&
-    !['INPUT', 'TEXTAREA'].includes((event.target as HTMLElement)?.tagName ?? '') &&
-    !isPointerLocked
-  ) {
+  if (capturingKeybinding) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (event.code === 'Escape') {
+      capturingKeybinding = null;
+    } else {
+      const duplicate = Object.entries(preferences.keybindings)
+        .find(([action, code]) => action !== capturingKeybinding && code === event.code);
+      if (duplicate) {
+        alert(`That key is already assigned to ${duplicate[0]}. Choose another key.`);
+      } else {
+        preferences.keybindings[capturingKeybinding] = event.code;
+        capturingKeybinding = null;
+        savePreferences();
+      }
+    }
+    applyPreferences();
+    return;
+  }
+
+  const target = event.target as HTMLElement | null;
+  const typing = !!target && (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable);
+  if (typing || isPointerLocked || projectManager.classList.contains('visible')) return;
+
+  if (event.code === preferences.keybindings.delete) {
     event.preventDefault();
     deleteSelected();
+  } else if (event.code === preferences.keybindings.move) {
+    transform.setMode('translate');
+    setActiveTool('translate');
+  } else if (event.code === preferences.keybindings.rotate) {
+    transform.setMode('rotate');
+    setActiveTool('rotate');
+  } else if (event.code === preferences.keybindings.scale) {
+    transform.setMode('scale');
+    setActiveTool('scale');
   }
 });
 
@@ -774,8 +875,7 @@ document.querySelectorAll<HTMLButtonElement>('[data-add]').forEach(button => {
 document.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach(button => {
   button.addEventListener('click', () => {
     transform.setMode(button.dataset.tool as 'translate' | 'rotate' | 'scale');
-    document.querySelectorAll('[data-tool]').forEach(item => item.classList.remove('active'));
-    button.classList.add('active');
+    setActiveTool(button.dataset.tool as 'translate' | 'rotate' | 'scale');
   });
 });
 
@@ -1140,6 +1240,63 @@ function makeEmptyWorld(): WorldDocument {
   };
 }
 
+
+function setActiveTool(mode: 'translate' | 'rotate' | 'scale') {
+  document.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach(button => {
+    button.classList.toggle('active', button.dataset.tool === mode);
+  });
+}
+
+document.querySelector<HTMLButtonElement>('#settings-button')?.addEventListener('click', openSettings);
+document.querySelector<HTMLButtonElement>('#dashboard-settings-button')?.addEventListener('click', openSettings);
+document.querySelector<HTMLButtonElement>('#close-settings')?.addEventListener('click', closeSettings);\ndocument.querySelector<HTMLButtonElement>('#settings-done')?.addEventListener('click', closeSettings);
+document.querySelector<HTMLSelectElement>('#theme-select')?.addEventListener('change', event => {
+  preferences.theme = (event.target as HTMLSelectElement).value as AppPreferences['theme'];
+  savePreferences();
+  applyPreferences();
+});
+document.querySelector<HTMLSelectElement>('#density-select')?.addEventListener('change', event => {
+  preferences.density = (event.target as HTMLSelectElement).value as AppPreferences['density'];
+  savePreferences();
+  applyPreferences();
+});
+document.querySelector<HTMLInputElement>('#accent-color')?.addEventListener('input', event => {
+  preferences.accent = (event.target as HTMLInputElement).value;
+  savePreferences();
+  applyPreferences();
+});
+document.querySelector<HTMLInputElement>('#accent-hex')?.addEventListener('change', event => {
+  const value = (event.target as HTMLInputElement).value.trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(value)) {
+    preferences.accent = value;
+    savePreferences();
+    applyPreferences();
+  } else {
+    alert('Enter a valid six-digit hex color, such as #D2B16D.');
+    applyPreferences();
+  }
+});
+document.querySelectorAll<HTMLButtonElement>('[data-accent-preset]').forEach(button => {
+  button.addEventListener('click', () => {
+    preferences.accent = button.dataset.accentPreset!;
+    savePreferences();
+    applyPreferences();
+  });
+});
+document.querySelectorAll<HTMLButtonElement>('[data-keybinding]').forEach(button => {
+  button.addEventListener('click', () => {
+    capturingKeybinding = button.dataset.keybinding as keyof AppPreferences['keybindings'];
+    applyPreferences();
+  });
+});
+document.querySelector<HTMLButtonElement>('#reset-preferences')?.addEventListener('click', () => {
+  preferences = structuredClone(defaultPreferences);
+  capturingKeybinding = null;
+  savePreferences();
+  applyPreferences();
+});
+applyPreferences();
+
 async function refreshProjectList() {
   const projects = await listProjects();
   projectListElement.innerHTML = '';
@@ -1169,6 +1326,7 @@ async function refreshProjectList() {
       currentProjectName.textContent = project.name;
       projectManager.classList.remove('visible');
       saveStatus.textContent = 'PROJECT OPENED';
+      document.querySelector('#editor-screen')?.classList.remove('hidden');
     });
     const renameButton = document.createElement('button');
     renameButton.textContent = 'Rename';
@@ -1202,6 +1360,7 @@ async function refreshProjectList() {
 async function showProjectManager() {
   if (isPointerLocked) document.exitPointerLock();
   projectManager.classList.add('visible');
+  document.querySelector('#editor-screen')?.classList.add('hidden');
   await refreshProjectList();
 }
 
@@ -1218,6 +1377,7 @@ document.querySelector<HTMLButtonElement>('#create-project-button')!
     currentProjectName.textContent = project.name;
     projectNameInput.value = '';
     projectManager.classList.remove('visible');
+    document.querySelector('#editor-screen')?.classList.remove('hidden');
     saveStatus.textContent = 'PROJECT CREATED';
   });
 
@@ -1235,7 +1395,7 @@ document.querySelector<HTMLButtonElement>('#save-button')!
 
 document.querySelector<HTMLButtonElement>('#close-project-manager')!
   .addEventListener('click', () => {
-    if (currentProject) projectManager.classList.remove('visible');
+    if (currentProject) { projectManager.classList.remove('visible'); document.querySelector('#editor-screen')?.classList.remove('hidden'); }
   });
 
 
