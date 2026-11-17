@@ -1,12 +1,22 @@
 import * as THREE from 'three';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
+import {
+  createProjectRecord,
+  deleteProject,
+  listProjects,
+  saveProject,
+  type EntityKind,
+  type ProjectObject,
+  type StoredProject,
+  type WorldDocument
+} from './projectStorage';
 import './style.css';
 
-type EntityKind = 'mesh' | 'pointLight' | 'directionalLight' | 'spotLight' | 'camera';
-
 interface Entity {
+  id: string;
   object: THREE.Object3D;
   kind: EntityKind;
+  primitiveType?: 'box' | 'sphere' | 'cylinder' | 'plane';
   helper?: THREE.Object3D;
   name: string;
   shadowLayer?: number;
@@ -21,6 +31,12 @@ const inspectorHeading = document.querySelector<HTMLDivElement>('#inspector-head
 let showingWorldSettings = false;
 const cameraStatus = document.querySelector<HTMLSpanElement>('#camera-status')!;
 const selectionStatus = document.querySelector<HTMLSpanElement>('#selection-status')!;
+const projectManager = document.querySelector<HTMLDivElement>('#project-manager')!;
+const projectListElement = document.querySelector<HTMLDivElement>('#project-list')!;
+const projectNameInput = document.querySelector<HTMLInputElement>('#new-project-name')!;
+const currentProjectName = document.querySelector<HTMLElement>('#current-project-name')!;
+const saveStatus = document.querySelector<HTMLSpanElement>('#save-status')!;
+let currentProject: StoredProject | null = null;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x8295a8);
@@ -139,6 +155,7 @@ resize();
 
 function registerEntity(object: THREE.Object3D, kind: EntityKind, helper?: THREE.Object3D) {
   const entity: Entity = {
+    id: crypto.randomUUID(),
     object,
     kind,
     helper,
@@ -231,6 +248,7 @@ function addObject(type: string) {
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     registerEntity(mesh, 'mesh');
+    entities[entities.length - 1].primitiveType = type;
     return;
   }
 
@@ -839,9 +857,94 @@ renderer.domElement.addEventListener('click', event => {
   selectEntity(entity);
 });
 
-document.querySelector<HTMLButtonElement>('#save-button')!.addEventListener('click', () => {
-  const world = {
-    name: 'Untitled World',
+async function textureToDataUrl(texture: THREE.Texture): Promise<string | undefined> {
+  const image = texture.image as CanvasImageSource & { width?: number; height?: number };
+  if (!image) return undefined;
+  const width = image.width ?? 0;
+  const height = image.height ?? 0;
+  if (!width || !height) return undefined;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  if (!context) return undefined;
+
+  try {
+    context.drawImage(image, 0, 0);
+    return canvas.toDataURL('image/png');
+  } catch (error) {
+    console.warn('Could not embed a texture in this project:', error);
+    return undefined;
+  }
+}
+
+async function serializeWorld(): Promise<WorldDocument> {
+  const objects: ProjectObject[] = await Promise.all(entities.map(async entity => {
+    const object = entity.object;
+    const data: ProjectObject = {
+      id: entity.id,
+      name: entity.name,
+      kind: entity.kind,
+      position: object.position.toArray() as [number, number, number],
+      rotation: [object.rotation.x, object.rotation.y, object.rotation.z],
+      scale: object.scale.toArray() as [number, number, number]
+    };
+
+    if (entity.kind === 'mesh') {
+      const mesh = object as THREE.Mesh;
+      const material = mesh.material as THREE.MeshStandardMaterial;
+      data.geometry = { type: entity.primitiveType ?? 'custom', parameters: [] };
+      data.material = {
+        color: `#${material.color.getHexString()}`,
+        roughness: material.roughness,
+        metalness: material.metalness,
+        textureDataUrl: material.map ? await textureToDataUrl(material.map) : undefined
+      };
+      data.lightTransmissionEnabled = Boolean(entity.lightTransmissionEnabled);
+      data.shadowExcludedLightIds = [...(entity.shadowExcludedLights ?? [])].map(light => light.id);
+    }
+
+    if (entity.kind === 'pointLight') {
+      const light = object as THREE.PointLight;
+      data.light = {
+        color: `#${light.color.getHexString()}`,
+        intensity: light.intensity,
+        distance: light.distance,
+        decay: light.decay,
+        castShadow: light.castShadow
+      };
+    } else if (entity.kind === 'directionalLight') {
+      const light = object as THREE.DirectionalLight;
+      data.light = {
+        color: `#${light.color.getHexString()}`,
+        intensity: light.intensity,
+        castShadow: light.castShadow
+      };
+      data.targetPosition = light.target.position.toArray() as [number, number, number];
+    } else if (entity.kind === 'spotLight') {
+      const light = object as THREE.SpotLight;
+      data.light = {
+        color: `#${light.color.getHexString()}`,
+        intensity: light.intensity,
+        distance: light.distance,
+        decay: light.decay,
+        angle: light.angle,
+        penumbra: light.penumbra,
+        castShadow: light.castShadow
+      };
+      data.targetPosition = light.target.position.toArray() as [number, number, number];
+    }
+
+    if (entity.kind === 'camera') {
+      const camera = object as THREE.PerspectiveCamera;
+      data.camera = { fov: camera.fov, near: camera.near, far: camera.far };
+    }
+    return data;
+  }));
+
+  return {
+    schemaVersion: 1,
     settings: {
       backgroundColor: scene.background instanceof THREE.Color
         ? `#${scene.background.getHexString()}`
@@ -850,53 +953,297 @@ document.querySelector<HTMLButtonElement>('#save-button')!.addEventListener('cli
       sun: {
         enabled: sunlight.visible,
         color: `#${sunlight.color.getHexString()}`,
-        intensity: sunlight.intensity
+        intensity: sunlight.intensity,
+        position: sunlight.position.toArray() as [number, number, number]
       },
       ambient: {
         skyColor: `#${ambientLight.color.getHexString()}`,
         groundColor: `#${ambientLight.groundColor.getHexString()}`,
         intensity: ambientLight.intensity
+      },
+      ground: {
+        enabled: ground.visible,
+        color: `#${((ground.material as THREE.MeshStandardMaterial).color).getHexString()}`,
+        size: (ground.geometry as THREE.PlaneGeometry).parameters.width
       }
     },
-    objects: entities.map(entity => {
-      const object = entity.object;
-      const data: any = {
-        name: entity.name,
-        kind: entity.kind,
-        position: object.position.toArray(),
-        rotation: [object.rotation.x, object.rotation.y, object.rotation.z],
-        scale: object.scale.toArray()
-      };
-
-      if (entity.kind === 'mesh') {
-        const material = (object as THREE.Mesh).material as THREE.MeshStandardMaterial;
-        data.color = `#${material.color.getHexString()}`;
-        data.roughness = material.roughness;
-        data.metalness = material.metalness;
-        data.textureApplied = Boolean(material.map);
-        data.lightTransmissionEnabled = Boolean(entity.lightTransmissionEnabled);
-        data.shadowExcludedLights = [...(entity.shadowExcludedLights ?? [])].map(light => light.name);
-      }
-
-      if (entity.kind.includes('Light')) {
-        const light = object as THREE.Light;
-        data.color = `#${light.color.getHexString()}`;
-        data.intensity = light.intensity;
-      }
-
-      if (entity.kind === 'camera') data.fov = (object as THREE.PerspectiveCamera).fov;
-      return data;
-    })
+    objects,
+    editorCamera: {
+      position: editorCamera.position.toArray() as [number, number, number],
+      rotation: [editorCamera.rotation.x, editorCamera.rotation.y, editorCamera.rotation.z]
+    }
   };
+}
 
-  const blob = new Blob([JSON.stringify(world, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = 'untitled-world.json';
-  link.click();
-  URL.revokeObjectURL(url);
-});
+function disposeEntity(entity: Entity) {
+  scene.remove(entity.object);
+  if (entity.kind === 'spotLight') {
+    scene.remove((entity.object as THREE.SpotLight).target);
+  }
+  if (entity.object instanceof THREE.Mesh) {
+    entity.object.geometry.dispose();
+    const material = entity.object.material;
+    (Array.isArray(material) ? material : [material]).forEach(item => {
+      const standard = item as THREE.MeshStandardMaterial;
+      standard.map?.dispose();
+      item.dispose();
+    });
+  }
+  if (entity.helper) {
+    scene.remove(entity.helper);
+    entity.helper.traverse(child => {
+      const visual = child as THREE.Mesh;
+      visual.geometry?.dispose();
+      const material = visual.material;
+      if (material) (Array.isArray(material) ? material : [material]).forEach(item => item.dispose());
+    });
+  }
+}
+
+async function loadWorld(world: WorldDocument) {
+  transform.detach();
+  for (const entity of [...entities]) disposeEntity(entity);
+  entities.length = 0;
+  selected = null;
+  previewCamera = null;
+  objectNumber = 0;
+
+  scene.background = new THREE.Color(world.settings.backgroundColor);
+  Object.assign(fogSettings, world.settings.fog);
+  updateFog();
+
+  sunlight.visible = world.settings.sun.enabled;
+  sunlight.color.set(world.settings.sun.color);
+  sunlight.intensity = world.settings.sun.intensity;
+  sunlight.position.fromArray(world.settings.sun.position);
+  ambientLight.color.set(world.settings.ambient.skyColor);
+  ambientLight.groundColor.set(world.settings.ambient.groundColor);
+  ambientLight.intensity = world.settings.ambient.intensity;
+
+  ground.visible = world.settings.ground.enabled;
+  (ground.material as THREE.MeshStandardMaterial).color.set(world.settings.ground.color);
+  const groundSize = Math.max(1, world.settings.ground.size);
+  ground.geometry.dispose();
+  ground.geometry = new THREE.PlaneGeometry(groundSize, groundSize);
+
+  editorCamera.position.fromArray(world.editorCamera.position);
+  editorCamera.rotation.set(...world.editorCamera.rotation);
+
+  const loadedById = new Map<string, Entity>();
+  for (const data of world.objects) {
+    let object: THREE.Object3D;
+    let helper: THREE.Object3D | undefined;
+
+    if (data.kind === 'mesh') {
+      const type = data.geometry?.type ?? 'box';
+      let geometry: THREE.BufferGeometry;
+      if (type === 'sphere') geometry = new THREE.SphereGeometry(1, 32, 20);
+      else if (type === 'cylinder') geometry = new THREE.CylinderGeometry(0.8, 0.8, 1.8, 32);
+      else if (type === 'plane') geometry = new THREE.PlaneGeometry(3, 3);
+      else geometry = new THREE.BoxGeometry(1.8, 1.8, 1.8);
+
+      const material = new THREE.MeshStandardMaterial({
+        color: data.material?.color ?? '#b9c5d5',
+        roughness: data.material?.roughness ?? 0.72,
+        metalness: data.material?.metalness ?? 0.05
+      });
+      if (data.material?.textureDataUrl) {
+        const texture = await new Promise<THREE.Texture | null>(resolve => {
+          new THREE.TextureLoader().load(data.material!.textureDataUrl!, resolve, undefined, () => resolve(null));
+        });
+        if (texture) {
+          texture.colorSpace = THREE.SRGBColorSpace;
+          texture.wrapS = THREE.RepeatWrapping;
+          texture.wrapT = THREE.RepeatWrapping;
+          material.map = texture;
+          material.color.set(0xffffff);
+        }
+      }
+      object = new THREE.Mesh(geometry, material);
+      (object as THREE.Mesh).castShadow = true;
+      (object as THREE.Mesh).receiveShadow = true;
+    } else if (data.kind === 'pointLight') {
+      const settings = data.light!;
+      const light = new THREE.PointLight(settings.color, settings.intensity, settings.distance, settings.decay);
+      light.castShadow = settings.castShadow;
+      object = light;
+      helper = new THREE.PointLightHelper(light, 0.35);
+    } else if (data.kind === 'directionalLight') {
+      const settings = data.light!;
+      const light = new THREE.DirectionalLight(settings.color, settings.intensity);
+      light.castShadow = settings.castShadow;
+      object = light;
+      helper = new THREE.DirectionalLightHelper(light, 1);
+    } else if (data.kind === 'spotLight') {
+      const settings = data.light!;
+      const light = new THREE.SpotLight(
+        settings.color, settings.intensity, settings.distance, settings.angle, settings.penumbra, settings.decay
+      );
+      light.castShadow = settings.castShadow;
+      object = light;
+      light.target.position.fromArray(data.targetPosition ?? [0, -1, -4]);
+      scene.add(light.target);
+      helper = new THREE.SpotLightHelper(light);
+    } else {
+      const settings = data.camera!;
+      object = new THREE.PerspectiveCamera(settings.fov, 1, settings.near, settings.far);
+      helper = new THREE.CameraHelper(object as THREE.PerspectiveCamera);
+    }
+
+    object.name = data.name;
+    object.position.fromArray(data.position);
+    object.rotation.set(...data.rotation);
+    object.scale.fromArray(data.scale);
+    registerEntity(object, data.kind, helper);
+    const entity = entities[entities.length - 1];
+    entity.id = data.id;
+    if (data.kind === 'mesh') {
+      entity.primitiveType = data.geometry?.type === 'custom' ? 'box' : (data.geometry?.type ?? 'box');
+      entity.lightTransmissionEnabled = Boolean(data.lightTransmissionEnabled);
+    }
+    loadedById.set(data.id, entity);
+    if (data.kind === 'directionalLight' || data.kind === 'spotLight') {
+      const light = object as THREE.DirectionalLight | THREE.SpotLight;
+      if (data.targetPosition) light.target.position.fromArray(data.targetPosition);
+    }
+  }
+
+  for (const data of world.objects) {
+    const entity = loadedById.get(data.id);
+    if (!entity || entity.kind !== 'mesh') continue;
+    for (const lightId of data.shadowExcludedLightIds ?? []) {
+      const light = loadedById.get(lightId);
+      if (light) entity.shadowExcludedLights?.add(light);
+    }
+    applyMeshShadowLayers(entity);
+  }
+
+  selectEntity(null);
+  refreshOutliner();
+  refreshProperties();
+  resize();
+}
+
+function makeEmptyWorld(): WorldDocument {
+  return {
+    schemaVersion: 1,
+    settings: {
+      backgroundColor: '#8295a8',
+      fog: { enabled: true, color: '#8295a8', near: 45, far: 150 },
+      sun: { enabled: true, color: '#ffedcf', intensity: 3, position: [12, 20, 8] },
+      ambient: { skyColor: '#dceaff', groundColor: '#46505b', intensity: 2 },
+      ground: { enabled: true, color: '#59635c', size: 200 }
+    },
+    objects: [],
+    editorCamera: { position: [10, 8, 12], rotation: [0, 0, 0] }
+  };
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, character => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  })[character]!);
+}
+
+async function refreshProjectList() {
+  const projects = await listProjects();
+  projectListElement.innerHTML = '';
+  if (!projects.length) {
+    projectListElement.innerHTML = '<p class="muted project-empty">No projects yet. Create your first environment above.</p>';
+    return;
+  }
+
+  for (const project of projects) {
+    const card = document.createElement('div');
+    card.className = 'project-card';
+    const details = document.createElement('div');
+    details.className = 'project-card-details';
+    const title = document.createElement('strong');
+    title.textContent = project.name;
+    const updated = document.createElement('span');
+    updated.textContent = `Last saved ${new Date(project.updatedAt).toLocaleString()}`;
+    details.append(title, updated);
+
+    const actions = document.createElement('div');
+    actions.className = 'project-card-actions';
+    const openButton = document.createElement('button');
+    openButton.textContent = 'Open';
+    openButton.addEventListener('click', async () => {
+      currentProject = project;
+      await loadWorld(project.world);
+      currentProjectName.textContent = project.name;
+      projectManager.classList.remove('visible');
+      saveStatus.textContent = 'PROJECT OPENED';
+    });
+    const renameButton = document.createElement('button');
+    renameButton.textContent = 'Rename';
+    renameButton.addEventListener('click', async () => {
+      const nextName = prompt('Enter a new project name:', project.name)?.trim();
+      if (!nextName) return;
+      project.name = nextName;
+      project.updatedAt = Date.now();
+      await saveProject(project);
+      if (currentProject?.id === project.id) {
+        currentProject = project;
+        currentProjectName.textContent = nextName;
+      }
+      await refreshProjectList();
+    });
+    const deleteButton = document.createElement('button');
+    deleteButton.textContent = 'Delete';
+    deleteButton.className = 'project-delete';
+    deleteButton.addEventListener('click', async () => {
+      if (!confirm(`Delete "${project.name}" permanently from this browser?`)) return;
+      await deleteProject(project.id);
+      if (currentProject?.id === project.id) currentProject = null;
+      await refreshProjectList();
+    });
+    actions.append(openButton, renameButton, deleteButton);
+    card.append(details, actions);
+    projectListElement.appendChild(card);
+  }
+}
+
+async function showProjectManager() {
+  if (isPointerLocked) document.exitPointerLock();
+  projectManager.classList.add('visible');
+  await refreshProjectList();
+}
+
+document.querySelector<HTMLButtonElement>('#project-manager-button')!
+  .addEventListener('click', () => void showProjectManager());
+
+document.querySelector<HTMLButtonElement>('#create-project-button')!
+  .addEventListener('click', async () => {
+    const name = projectNameInput.value.trim() || 'Untitled Project';
+    await loadWorld(makeEmptyWorld());
+    const project = createProjectRecord(name, await serializeWorld());
+    await saveProject(project);
+    currentProject = project;
+    currentProjectName.textContent = project.name;
+    projectNameInput.value = '';
+    projectManager.classList.remove('visible');
+    saveStatus.textContent = 'PROJECT CREATED';
+  });
+
+document.querySelector<HTMLButtonElement>('#save-button')!
+  .addEventListener('click', async () => {
+    if (!currentProject) {
+      await showProjectManager();
+      return;
+    }
+    currentProject.world = await serializeWorld();
+    currentProject.updatedAt = Date.now();
+    await saveProject(currentProject);
+    saveStatus.textContent = 'SAVED LOCALLY';
+  });
+
+document.querySelector<HTMLButtonElement>('#close-project-manager')!
+  .addEventListener('click', () => {
+    if (currentProject) projectManager.classList.remove('visible');
+  });
+
+
 
 const clock = new THREE.Clock();
 
@@ -927,3 +1274,4 @@ function animate() {
 animate();
 refreshOutliner();
 refreshProperties();
+void showProjectManager();
