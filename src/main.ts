@@ -1249,7 +1249,8 @@ function setActiveTool(mode: 'translate' | 'rotate' | 'scale') {
 
 document.querySelector<HTMLButtonElement>('#settings-button')?.addEventListener('click', openSettings);
 document.querySelector<HTMLButtonElement>('#dashboard-settings-button')?.addEventListener('click', openSettings);
-document.querySelector<HTMLButtonElement>('#close-settings')?.addEventListener('click', closeSettings);\ndocument.querySelector<HTMLButtonElement>('#settings-done')?.addEventListener('click', closeSettings);
+document.querySelector<HTMLButtonElement>('#close-settings')?.addEventListener('click', closeSettings);
+document.querySelector<HTMLButtonElement>('#settings-done')?.addEventListener('click', closeSettings);
 document.querySelector<HTMLSelectElement>('#theme-select')?.addEventListener('change', event => {
   preferences.theme = (event.target as HTMLSelectElement).value as AppPreferences['theme'];
   savePreferences();
