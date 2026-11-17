@@ -265,7 +265,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 :root { --accent: #d2b16d; --ui-bg: #111318; --panel-bg: #191c23; --panel-border: #30343e; --ui-text: #e5e7eb; --muted-text: #8993a2; }
 .hidden { display: none !important; }
 .editor-screen { height: 100%; min-height: 0; display: flex; flex-direction: column; }
-.project-dashboard { position: fixed; inset: 0; z-index: 40; overflow-y: auto; background: var(--ui-bg); color: var(--ui-text); }
+.project-dashboard { display: none; position: fixed; inset: 0; z-index: 40; overflow-y: auto; background: var(--ui-bg); color: var(--ui-text); }
 .project-dashboard.visible { display: block; }
 .dashboard-shell { width: min(1180px, calc(100% - 56px)); margin: 0 auto; padding-bottom: 64px; }
 .dashboard-header { height: 76px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--panel-border); }
