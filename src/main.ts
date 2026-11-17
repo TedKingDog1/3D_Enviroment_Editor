@@ -469,7 +469,7 @@ document.addEventListener('keydown', event => {
 
   const target = event.target as HTMLElement | null;
   const typing = !!target && (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable);
-  if (typing || isPointerLocked || projectManager.classList.contains('visible')) return;
+  if (typing || isPointerLocked || projectManager.classList.contains('visible') || document.querySelector('#settings-panel')?.classList.contains('visible')) return;
 
   if (event.code === preferences.keybindings.delete) {
     event.preventDefault();
