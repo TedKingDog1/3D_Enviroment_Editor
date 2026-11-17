@@ -396,6 +396,9 @@ function addObject(type: string) {
 }
 
 function selectEntity(entity: Entity | null) {
+  if (terrainSculptActive && !(entity?.kind === 'mesh' && entity.primitiveType === 'terrain')) {
+    setTerrainSculptMode(false);
+  }
   selected = entity;
   transform.detach();
 
@@ -904,6 +907,7 @@ function setTerrainSculptMode(active: boolean) {
   terrainSculptActive = active; isSculptingTerrain = false; brushCursor.visible = false; transform.enabled = !active;
   document.querySelector('#terrain-toolbar')?.classList.toggle('hidden', !active);
   document.querySelector('#terrain-sculpt-toggle')?.classList.toggle('active', active);
+  document.querySelector('#viewport')?.classList.toggle('sculpting', active);
   if (active && !(selected?.kind === 'mesh' && selected.primitiveType === 'terrain')) { alert('Select a terrain object in the Outliner before sculpting.'); setTerrainSculptMode(false); }
 }
 document.querySelector<HTMLButtonElement>('#terrain-sculpt-toggle')?.addEventListener('click', () => setTerrainSculptMode(!terrainSculptActive));
