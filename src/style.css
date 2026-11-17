@@ -648,3 +648,6 @@ html[data-theme="system"] :focus-visible {
 .terrain-slider b{min-width:30px;color:var(--accent);font-variant-numeric:tabular-nums}
 #viewport{touch-action:none}
 @media(max-width:900px){.terrain-toolbar{right:8px;left:8px;gap:7px}.terrain-toolbar-title{width:100%}.terrain-slider input{width:70px}}
+
+.viewport-area { position: relative; }
+#viewport.sculpting canvas { cursor: crosshair; }
