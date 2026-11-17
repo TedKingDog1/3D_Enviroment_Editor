@@ -1359,6 +1359,12 @@ async function refreshProjectList() {
 
 async function showProjectManager() {
   if (isPointerLocked) document.exitPointerLock();
+  if (currentProject) {
+    currentProject.world = await serializeWorld();
+    currentProject.updatedAt = Date.now();
+    await saveProject(currentProject);
+    saveStatus.textContent = 'SAVED LOCALLY';
+  }
   projectManager.classList.add('visible');
   document.querySelector('#editor-screen')?.classList.add('hidden');
   await refreshProjectList();
@@ -1393,10 +1399,7 @@ document.querySelector<HTMLButtonElement>('#save-button')!
     saveStatus.textContent = 'SAVED LOCALLY';
   });
 
-document.querySelector<HTMLButtonElement>('#close-project-manager')!
-  .addEventListener('click', () => {
-    if (currentProject) { projectManager.classList.remove('visible'); document.querySelector('#editor-screen')?.classList.remove('hidden'); }
-  });
+
 
 
 
