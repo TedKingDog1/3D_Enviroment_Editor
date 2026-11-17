@@ -112,7 +112,14 @@
           </div>
           <div id="terrain-toolbar" class="terrain-toolbar hidden">
             <div class="terrain-toolbar-title"><strong>TERRAIN SCULPT</strong><span>Click and drag on the selected terrain</span></div>
-            <div class="terrain-mode-buttons"><button class="tool active" data-sculpt-mode="raise">Raise</button><button class="tool" data-sculpt-mode="lower">Lower</button><button class="tool" data-sculpt-mode="smooth">Smooth</button><button class="tool" data-sculpt-mode="flatten">Flatten</button></div>
+            <div class="terrain-tool-tabs"><button class="tool active" data-terrain-tool="sculpt">Sculpt</button><button class="tool" data-terrain-tool="paint">Paint</button></div>
+            <div id="terrain-sculpt-controls" class="terrain-mode-buttons"><button class="tool active" data-sculpt-mode="raise">Raise</button><button class="tool" data-sculpt-mode="lower">Lower</button><button class="tool" data-sculpt-mode="smooth">Smooth</button><button class="tool" data-sculpt-mode="flatten">Flatten</button></div>
+            <div id="terrain-paint-controls" class="terrain-paint-controls hidden">
+              <label class="terrain-slider">Material
+                <select id="terrain-paint-material"><option value="grass">Grass</option><option value="dirt">Dirt</option><option value="rock">Rock</option><option value="snow">Snow</option></select>
+              </label>
+              <label class="terrain-slider">Paint opacity <input id="terrain-paint-opacity" type="range" min="0.1" max="1" step="0.05" value="0.75"><b id="terrain-paint-opacity-value">75%</b></label>
+            </div>
             <label class="terrain-slider">Brush size <input id="terrain-brush-size" type="range" min="1" max="15" step="0.5" value="5"><b id="terrain-brush-size-value">5.0</b></label>
             <label class="terrain-slider">Strength <input id="terrain-brush-strength" type="range" min="0.1" max="1" step="0.05" value="0.5"><b id="terrain-brush-strength-value">50%</b></label>
             <button id="terrain-sculpt-done" class="secondary-button">Done</button>
