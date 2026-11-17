@@ -7,36 +7,89 @@
 </head>
 <body>
   <div id="app">
-    <header class="topbar">
+    <section id="project-manager" class="project-dashboard visible">
+      <div class="dashboard-shell">
+        <header class="dashboard-header">
+          <div class="brand">✦ CREATION <span>ENVIRONMENT STUDIO</span></div>
+          <button id="dashboard-settings-button" class="secondary-button">⚙ Settings</button>
+        </header>
+        <div class="dashboard-welcome">
+          <p class="eyebrow">YOUR CREATIVE WORKSPACE</p>
+          <h1>Projects</h1>
+          <p class="muted">Create, organize, and continue building your environments.</p>
+        </div>
+        <div class="dashboard-create">
+          <div>
+            <strong>Start something new</strong>
+            <span>Build a new world from a blank scene.</span>
+          </div>
+          <div class="new-project-row">
+            <input id="new-project-name" type="text" maxlength="60" placeholder="Name your new environment">
+            <button id="create-project-button">＋ New Project</button>
+          </div>
+        </div>
+        <div class="dashboard-section-heading">
+          <h2>Your Projects</h2>
+          <span>Stored locally in this browser</span>
+        </div>
+        <div id="project-list" class="project-list dashboard-project-grid"></div>
+      </div>
+    </section>    <section id="settings-panel" class="settings-panel">
+      <div class="settings-window">
+        <header class="settings-header">
+          <div><p class="eyebrow">APPLICATION PREFERENCES</p><h2>Settings</h2></div>
+          <button id="close-settings" class="manager-close" aria-label="Close settings">×</button>
+        </header>
+        <div class="settings-content">
+          <section class="settings-section">
+            <h3>Appearance</h3>
+            <label class="settings-field"><span>Theme</span>
+              <select id="theme-select"><option value="dark">Dark</option><option value="light">Light</option><option value="system">System</option></select>
+            </label>
+            <label class="settings-field"><span>Interface density</span>
+              <select id="density-select"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select>
+            </label>
+          </section>
+          <section class="settings-section">
+            <h3>Accent color</h3>
+            <p class="muted">Choose the highlight color used throughout the interface.</p>
+            <div class="accent-editor">
+              <input id="accent-color" type="color" value="#d2b16d" aria-label="Accent color">
+              <input id="accent-hex" type="text" value="#D2B16D" maxlength="7" aria-label="Accent hex value">
+            </div>
+            <div class="accent-presets">
+              <button type="button" data-accent-preset="#d2b16d" style="--swatch:#d2b16d" aria-label="Gold"></button>
+              <button type="button" data-accent-preset="#6ea8fe" style="--swatch:#6ea8fe" aria-label="Blue"></button>
+              <button type="button" data-accent-preset="#8bce9b" style="--swatch:#8bce9b" aria-label="Green"></button>
+              <button type="button" data-accent-preset="#c58af9" style="--swatch:#c58af9" aria-label="Purple"></button>
+              <button type="button" data-accent-preset="#f08c8c" style="--swatch:#f08c8c" aria-label="Coral"></button>
+              <button type="button" data-accent-preset="#e7e9ee" style="--swatch:#e7e9ee" aria-label="Silver"></button>
+            </div>
+          </section>
+          <section class="settings-section">
+            <h3>Keyboard shortcuts</h3>
+            <p class="muted">Select a shortcut, then press the key you want to assign. Escape cancels. Duplicate assignments are blocked.</p>
+            <div class="keybinding-row"><span>Delete selected</span><button data-keybinding="delete">Del</button></div>
+            <div class="keybinding-row"><span>Move tool</span><button data-keybinding="move">G</button></div>
+            <div class="keybinding-row"><span>Rotate tool</span><button data-keybinding="rotate">R</button></div>
+            <div class="keybinding-row"><span>Scale tool</span><button data-keybinding="scale">S</button></div>
+          </section>
+        </div>
+        <footer class="settings-footer"><button id="reset-preferences" class="secondary-button">Reset to defaults</button><button id="settings-done" class="primary-button">Done</button></footer>
+      </div>
+    </section>\n    <div id="editor-screen" class="editor-screen hidden">\n    <header class="topbar">
       <div class="brand">✦ CREATION <span>ENVIRONMENT STUDIO</span></div>
       <div class="top-actions">
         <span class="world-name">PROJECT: <b id="current-project-name">No Project</b></span>
         <span id="save-status" class="save-status">NOT SAVED</span>
-        <button id="project-manager-button">Projects</button>
+        <button id="project-manager-button">← Projects</button>\n        <button id="settings-button">Settings</button>
         <button id="world-settings-button">World Settings</button>
         <button id="delete-button">Delete Selected</button>
         <button id="save-button">Save Project</button>
       </div>
     </header>
 
-    <section id="project-manager" class="project-manager visible">
-      <div class="project-manager-window">
-        <div class="project-manager-title">
-          <div>
-            <p class="eyebrow">CREATION ENVIRONMENT STUDIO</p>
-            <h1>Project Manager</h1>
-            <p class="muted">Your environments are stored locally in this browser.</p>
-          </div>
-          <button id="close-project-manager" class="manager-close" title="Return to the editor">×</button>
-        </div>
-        <div class="new-project-row">
-          <input id="new-project-name" type="text" maxlength="60" placeholder="Name your new environment">
-          <button id="create-project-button">＋ Create Project</button>
-        </div>
-        <h2>Your Projects</h2>
-        <div id="project-list" class="project-list"></div>
-      </div>
-    </section>
+ion>
 
     <main class="workspace">
       <aside class="outliner panel">
