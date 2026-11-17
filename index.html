@@ -10,12 +10,33 @@
     <header class="topbar">
       <div class="brand">✦ CREATION <span>ENVIRONMENT STUDIO</span></div>
       <div class="top-actions">
-        <span class="world-name">WORLD: <b>Untitled World</b></span>
+        <span class="world-name">PROJECT: <b id="current-project-name">No Project</b></span>
+        <span id="save-status" class="save-status">NOT SAVED</span>
+        <button id="project-manager-button">Projects</button>
         <button id="world-settings-button">World Settings</button>
         <button id="delete-button">Delete Selected</button>
-          <button id="save-button">Save World</button>
+        <button id="save-button">Save Project</button>
       </div>
     </header>
+
+    <section id="project-manager" class="project-manager visible">
+      <div class="project-manager-window">
+        <div class="project-manager-title">
+          <div>
+            <p class="eyebrow">CREATION ENVIRONMENT STUDIO</p>
+            <h1>Project Manager</h1>
+            <p class="muted">Your environments are stored locally in this browser.</p>
+          </div>
+          <button id="close-project-manager" class="manager-close" title="Return to the editor">×</button>
+        </div>
+        <div class="new-project-row">
+          <input id="new-project-name" type="text" maxlength="60" placeholder="Name your new environment">
+          <button id="create-project-button">＋ Create Project</button>
+        </div>
+        <h2>Your Projects</h2>
+        <div id="project-list" class="project-list"></div>
+      </div>
+    </section>
 
     <main class="workspace">
       <aside class="outliner panel">
