@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
+import { createTerrainGeometry, getTerrainHeights, sculptTerrain, type SculptMode } from './terrainTools';
 import {
   createProjectRecord,
   deleteProject,
@@ -16,7 +17,7 @@ interface Entity {
   id: string;
   object: THREE.Object3D;
   kind: EntityKind;
-  primitiveType?: 'box' | 'sphere' | 'cylinder' | 'plane';
+  primitiveType?: 'box' | 'sphere' | 'cylinder' | 'plane' | 'terrain';
   helper?: THREE.Object3D;
   name: string;
   shadowLayer?: number;
@@ -162,6 +163,19 @@ scene.add(transform.getHelper());
 
 const entities: Entity[] = [];
 let selected: Entity | null = null;
+let terrainSculptActive = false;
+let isSculptingTerrain = false;
+let sculptMode: SculptMode = 'raise';
+let brushRadius = 5;
+let brushStrength = 0.5;
+let flattenHeight = 0;
+const brushRaycaster = new THREE.Raycaster();
+const brushPointer = new THREE.Vector2();
+const brushCursor = new THREE.Mesh(new THREE.RingGeometry(0.94, 1, 48), new THREE.MeshBasicMaterial({ color: 0xffd36e, side: THREE.DoubleSide, depthTest: false }));
+brushCursor.rotation.x = -Math.PI / 2;
+brushCursor.visible = false;
+brushCursor.renderOrder = 20;
+scene.add(brushCursor);
 
 const defaultSunEntity: Entity = {
   id: 'world-sun',
@@ -322,6 +336,20 @@ function addObject(type: string) {
     mesh.receiveShadow = true;
     registerEntity(mesh, 'mesh');
     entities[entities.length - 1].primitiveType = type;
+    return;
+  }
+
+  if (type === 'terrain') {
+    const geometry = createTerrainGeometry(60, 60, 80);
+    const material = new THREE.MeshStandardMaterial({ color: 0x687b55, roughness: 0.96 });
+    const terrain = new THREE.Mesh(geometry, material);
+    terrain.name = `Terrain ${++objectNumber}`;
+    terrain.rotation.x = -Math.PI / 2;
+    terrain.position.set(0, 0.015, 0);
+    terrain.receiveShadow = true;
+    terrain.castShadow = true;
+    registerEntity(terrain, 'mesh');
+    entities[entities.length - 1].primitiveType = 'terrain';
     return;
   }
 
@@ -872,6 +900,25 @@ document.querySelectorAll<HTMLButtonElement>('[data-add]').forEach(button => {
   button.addEventListener('click', () => addObject(button.dataset.add!));
 });
 
+function setTerrainSculptMode(active: boolean) {
+  terrainSculptActive = active; isSculptingTerrain = false; brushCursor.visible = false; transform.enabled = !active;
+  document.querySelector('#terrain-toolbar')?.classList.toggle('hidden', !active);
+  document.querySelector('#terrain-sculpt-toggle')?.classList.toggle('active', active);
+  if (active && !(selected?.kind === 'mesh' && selected.primitiveType === 'terrain')) { alert('Select a terrain object in the Outliner before sculpting.'); setTerrainSculptMode(false); }
+}
+document.querySelector<HTMLButtonElement>('#terrain-sculpt-toggle')?.addEventListener('click', () => setTerrainSculptMode(!terrainSculptActive));
+document.querySelector<HTMLButtonElement>('#terrain-sculpt-done')?.addEventListener('click', () => setTerrainSculptMode(false));
+document.querySelectorAll<HTMLButtonElement>('[data-sculpt-mode]').forEach(button => button.addEventListener('click', () => { sculptMode=button.dataset.sculptMode as SculptMode; document.querySelectorAll<HTMLButtonElement>('[data-sculpt-mode]').forEach(item=>item.classList.toggle('active',item===button)); }));
+document.querySelector<HTMLInputElement>('#terrain-brush-size')?.addEventListener('input',event=>{ brushRadius=Number((event.target as HTMLInputElement).value); document.querySelector('#terrain-brush-size-value')!.textContent=brushRadius.toFixed(1); brushCursor.scale.setScalar(brushRadius); });
+document.querySelector<HTMLInputElement>('#terrain-brush-strength')?.addEventListener('input',event=>{ brushStrength=Number((event.target as HTMLInputElement).value); document.querySelector('#terrain-brush-strength-value')!.textContent=`${Math.round(brushStrength*100)}%`; });
+function getTerrainHit(event: PointerEvent): THREE.Intersection<THREE.Object3D> | null {
+  if(!selected||selected.kind!=='mesh'||selected.primitiveType!=='terrain')return null;
+  const bounds=renderer.domElement.getBoundingClientRect(); brushPointer.x=((event.clientX-bounds.left)/bounds.width)*2-1; brushPointer.y=-((event.clientY-bounds.top)/bounds.height)*2+1; brushRaycaster.setFromCamera(brushPointer,editorCamera); return brushRaycaster.intersectObject(selected.object,false)[0]??null;
+}
+renderer.domElement.addEventListener('pointerdown',event=>{ if(!terrainSculptActive||event.button!==0||isPointerLocked)return; const hit=getTerrainHit(event); if(!hit||!selected)return; event.preventDefault(); isSculptingTerrain=true; flattenHeight=selected.object.worldToLocal(hit.point.clone()).z; sculptTerrain(selected.object as THREE.Mesh,hit.point,sculptMode,brushRadius,brushStrength,flattenHeight); renderer.domElement.setPointerCapture(event.pointerId); });
+renderer.domElement.addEventListener('pointermove',event=>{ if(!terrainSculptActive)return; const hit=getTerrainHit(event); if(hit){ brushCursor.position.copy(hit.point); brushCursor.position.y+=0.04; brushCursor.scale.setScalar(brushRadius); brushCursor.visible=true; } else brushCursor.visible=false; if(isSculptingTerrain&&hit&&selected)sculptTerrain(selected.object as THREE.Mesh,hit.point,sculptMode,brushRadius,brushStrength,flattenHeight); });
+const stopTerrainSculpt=()=>{isSculptingTerrain=false;}; renderer.domElement.addEventListener('pointerup',stopTerrainSculpt); renderer.domElement.addEventListener('pointercancel',stopTerrainSculpt); window.addEventListener('pointerup',stopTerrainSculpt);
+
 document.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach(button => {
   button.addEventListener('click', () => {
     transform.setMode(button.dataset.tool as 'translate' | 'rotate' | 'scale');
@@ -945,7 +992,7 @@ document.addEventListener('keyup', event => keys.delete(event.code));
 window.addEventListener('blur', () => keys.clear());
 
 renderer.domElement.addEventListener('click', event => {
-  if (isPointerLocked || isDraggingTransform) return;
+  if (terrainSculptActive || isPointerLocked || isDraggingTransform) return;
 
   const bounds = renderer.domElement.getBoundingClientRect();
   pointer.x = ((event.clientX - bounds.left) / bounds.width) * 2 - 1;
@@ -995,7 +1042,11 @@ async function serializeWorld(): Promise<WorldDocument> {
     if (entity.kind === 'mesh') {
       const mesh = object as THREE.Mesh;
       const material = mesh.material as THREE.MeshStandardMaterial;
-      data.geometry = { type: entity.primitiveType ?? 'custom', parameters: [] };
+      data.geometry = { type: entity.primitiveType ?? 'custom', parameters: entity.primitiveType === 'terrain' ? [(mesh.geometry as THREE.PlaneGeometry).parameters.width, (mesh.geometry as THREE.PlaneGeometry).parameters.height, (mesh.geometry as THREE.PlaneGeometry).parameters.widthSegments] : [] };
+      if (entity.primitiveType === 'terrain') {
+        const geometry = mesh.geometry as THREE.PlaneGeometry;
+        data.terrainData = { width: geometry.parameters.width, depth: geometry.parameters.height, segments: geometry.parameters.widthSegments, heights: getTerrainHeights(geometry) };
+      }
       data.material = {
         color: `#${material.color.getHexString()}`,
         roughness: material.roughness,
@@ -1138,7 +1189,10 @@ async function loadWorld(world: WorldDocument) {
     if (data.kind === 'mesh') {
       const type = data.geometry?.type ?? 'box';
       let geometry: THREE.BufferGeometry;
-      if (type === 'sphere') geometry = new THREE.SphereGeometry(1, 32, 20);
+      if (type === 'terrain') {
+        const terrain = data.terrainData;
+        geometry = createTerrainGeometry(terrain?.width ?? 60, terrain?.depth ?? 60, terrain?.segments ?? 80, terrain?.heights);
+      } else if (type === 'sphere') geometry = new THREE.SphereGeometry(1, 32, 20);
       else if (type === 'cylinder') geometry = new THREE.CylinderGeometry(0.8, 0.8, 1.8, 32);
       else if (type === 'plane') geometry = new THREE.PlaneGeometry(3, 3);
       else geometry = new THREE.BoxGeometry(1.8, 1.8, 1.8);
@@ -1161,6 +1215,7 @@ async function loadWorld(world: WorldDocument) {
         }
       }
       object = new THREE.Mesh(geometry, material);
+      if (type === 'terrain') { object.rotation.x = -Math.PI / 2; object.position.y = 0.015; }
       (object as THREE.Mesh).castShadow = true;
       (object as THREE.Mesh).receiveShadow = true;
     } else if (data.kind === 'pointLight') {
