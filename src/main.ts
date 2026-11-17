@@ -171,6 +171,113 @@ let brushStrength = 0.5;
 let flattenHeight = 0;
 const brushRaycaster = new THREE.Raycaster();
 const brushPointer = new THREE.Vector2();
+
+type TerrainPaintMaterial = 'grass' | 'dirt' | 'rock' | 'snow';
+type TerrainToolMode = 'sculpt' | 'paint';
+let terrainToolMode: TerrainToolMode = 'sculpt';
+let selectedPaintMaterial: TerrainPaintMaterial = 'grass';
+let paintOpacity = 0.75;
+const terrainPaintCanvases = new WeakMap<THREE.Mesh, HTMLCanvasElement>();
+const terrainTextureSize = 1024;
+
+function createMaterialTile(material: TerrainPaintMaterial): HTMLCanvasElement {
+  const tile = document.createElement('canvas');
+  tile.width = 128;
+  tile.height = 128;
+  const ctx = tile.getContext('2d')!;
+  const palettes: Record<TerrainPaintMaterial, [string, string, string]> = {
+    grass: ['#536d3c', '#78934e', '#344b2d'],
+    dirt: ['#76563b', '#a17a52', '#503b2d'],
+    rock: ['#777b7b', '#a4a5a0', '#4f5558'],
+    snow: ['#d8e0e5', '#ffffff', '#aebdca']
+  };
+  const [base, light, dark] = palettes[material];
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, tile.width, tile.height);
+  for (let i = 0; i < 950; i++) {
+    const x = Math.random() * tile.width;
+    const y = Math.random() * tile.height;
+    const radius = 0.5 + Math.random() * (material === 'rock' ? 3.2 : 2.1);
+    ctx.globalAlpha = 0.12 + Math.random() * 0.3;
+    ctx.fillStyle = Math.random() > 0.48 ? light : dark;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  return tile;
+}
+
+const terrainMaterialTiles: Record<TerrainPaintMaterial, HTMLCanvasElement> = {
+  grass: createMaterialTile('grass'),
+  dirt: createMaterialTile('dirt'),
+  rock: createMaterialTile('rock'),
+  snow: createMaterialTile('snow')
+};
+
+function createTerrainPaintCanvas(base: TerrainPaintMaterial = 'grass', source?: CanvasImageSource): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = terrainTextureSize;
+  canvas.height = terrainTextureSize;
+  const ctx = canvas.getContext('2d')!;
+  if (source) {
+    ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+  } else {
+    const pattern = ctx.createPattern(terrainMaterialTiles[base], 'repeat')!;
+    ctx.fillStyle = pattern;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+  return canvas;
+}
+
+function createTerrainPaintMap(mesh: THREE.Mesh, source?: CanvasImageSource) {
+  const canvas = createTerrainPaintCanvas('grass', source);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.ClampToEdgeWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  const material = mesh.material as THREE.MeshStandardMaterial;
+  material.map?.dispose();
+  material.map = texture;
+  material.color.set(0xffffff);
+  material.needsUpdate = true;
+  terrainPaintCanvases.set(mesh, canvas);
+}
+
+function paintTerrainAt(mesh: THREE.Mesh, uv: THREE.Vector2) {
+  let canvas = terrainPaintCanvases.get(mesh);
+  const material = mesh.material as THREE.MeshStandardMaterial;
+  if (!canvas) {
+    const source = material.map?.image as CanvasImageSource | undefined;
+    createTerrainPaintMap(mesh, source);
+    canvas = terrainPaintCanvases.get(mesh)!;
+  }
+  const width = (mesh.geometry as THREE.PlaneGeometry).parameters.width;
+  const depth = (mesh.geometry as THREE.PlaneGeometry).parameters.height;
+  const radiusX = Math.max(3, brushRadius / width * canvas.width);
+  const radiusY = Math.max(3, brushRadius / depth * canvas.height);
+  const stamp = document.createElement('canvas');
+  stamp.width = Math.max(2, Math.ceil(radiusX * 2));
+  stamp.height = Math.max(2, Math.ceil(radiusY * 2));
+  const stampCtx = stamp.getContext('2d')!;
+  const pattern = stampCtx.createPattern(terrainMaterialTiles[selectedPaintMaterial], 'repeat')!;
+  stampCtx.fillStyle = pattern;
+  stampCtx.fillRect(0, 0, stamp.width, stamp.height);
+  stampCtx.globalCompositeOperation = 'destination-in';
+  const gradient = stampCtx.createRadialGradient(stamp.width / 2, stamp.height / 2, 0, stamp.width / 2, stamp.height / 2, Math.min(stamp.width, stamp.height) / 2);
+  gradient.addColorStop(0, `rgba(255,255,255,${paintOpacity})`);
+  gradient.addColorStop(0.72, `rgba(255,255,255,${paintOpacity * 0.7})`);
+  gradient.addColorStop(1, 'rgba(255,255,255,0)');
+  stampCtx.fillStyle = gradient;
+  stampCtx.fillRect(0, 0, stamp.width, stamp.height);
+  const ctx = canvas.getContext('2d')!;
+  const x = uv.x * canvas.width - radiusX;
+  const y = (1 - uv.y) * canvas.height - radiusY;
+  ctx.drawImage(stamp, x, y);
+  if (material.map instanceof THREE.CanvasTexture) material.map.needsUpdate = true;
+}
+
 const brushCursor = new THREE.Mesh(new THREE.RingGeometry(0.94, 1, 48), new THREE.MeshBasicMaterial({ color: 0xffd36e, side: THREE.DoubleSide, depthTest: false }));
 brushCursor.rotation.x = -Math.PI / 2;
 brushCursor.visible = false;
@@ -343,6 +450,7 @@ function addObject(type: string) {
     const geometry = createTerrainGeometry(60, 60, 80);
     const material = new THREE.MeshStandardMaterial({ color: 0x687b55, roughness: 0.96 });
     const terrain = new THREE.Mesh(geometry, material);
+    createTerrainPaintMap(terrain);
     terrain.name = `Terrain ${++objectNumber}`;
     terrain.rotation.x = -Math.PI / 2;
     terrain.position.set(0, 0.015, 0);
@@ -913,14 +1021,30 @@ function setTerrainSculptMode(active: boolean) {
 document.querySelector<HTMLButtonElement>('#terrain-sculpt-toggle')?.addEventListener('click', () => setTerrainSculptMode(!terrainSculptActive));
 document.querySelector<HTMLButtonElement>('#terrain-sculpt-done')?.addEventListener('click', () => setTerrainSculptMode(false));
 document.querySelectorAll<HTMLButtonElement>('[data-sculpt-mode]').forEach(button => button.addEventListener('click', () => { sculptMode=button.dataset.sculptMode as SculptMode; document.querySelectorAll<HTMLButtonElement>('[data-sculpt-mode]').forEach(item=>item.classList.toggle('active',item===button)); }));
+document.querySelectorAll<HTMLButtonElement>('[data-terrain-tool]').forEach(button => button.addEventListener('click', () => {
+  terrainToolMode = button.dataset.terrainTool as TerrainToolMode;
+  document.querySelectorAll<HTMLButtonElement>('[data-terrain-tool]').forEach(item => item.classList.toggle('active', item === button));
+  document.querySelector('#terrain-sculpt-controls')?.classList.toggle('hidden', terrainToolMode !== 'sculpt');
+  document.querySelector('#terrain-paint-controls')?.classList.toggle('hidden', terrainToolMode !== 'paint');
+  document.querySelector('.terrain-toolbar-title span')!.textContent = terrainToolMode === 'paint'
+    ? 'Choose a material, then click and drag to paint'
+    : 'Click and drag on the selected terrain';
+}));
+document.querySelector<HTMLSelectElement>('#terrain-paint-material')?.addEventListener('change', event => {
+  selectedPaintMaterial = (event.target as HTMLSelectElement).value as TerrainPaintMaterial;
+});
+document.querySelector<HTMLInputElement>('#terrain-paint-opacity')?.addEventListener('input', event => {
+  paintOpacity = Number((event.target as HTMLInputElement).value);
+  document.querySelector('#terrain-paint-opacity-value')!.textContent = `${Math.round(paintOpacity * 100)}%`;
+});
 document.querySelector<HTMLInputElement>('#terrain-brush-size')?.addEventListener('input',event=>{ brushRadius=Number((event.target as HTMLInputElement).value); document.querySelector('#terrain-brush-size-value')!.textContent=brushRadius.toFixed(1); brushCursor.scale.setScalar(brushRadius); });
 document.querySelector<HTMLInputElement>('#terrain-brush-strength')?.addEventListener('input',event=>{ brushStrength=Number((event.target as HTMLInputElement).value); document.querySelector('#terrain-brush-strength-value')!.textContent=`${Math.round(brushStrength*100)}%`; });
 function getTerrainHit(event: PointerEvent): THREE.Intersection<THREE.Object3D> | null {
   if(!selected||selected.kind!=='mesh'||selected.primitiveType!=='terrain')return null;
   const bounds=renderer.domElement.getBoundingClientRect(); brushPointer.x=((event.clientX-bounds.left)/bounds.width)*2-1; brushPointer.y=-((event.clientY-bounds.top)/bounds.height)*2+1; brushRaycaster.setFromCamera(brushPointer,editorCamera); return brushRaycaster.intersectObject(selected.object,false)[0]??null;
 }
-renderer.domElement.addEventListener('pointerdown',event=>{ if(!terrainSculptActive||event.button!==0||isPointerLocked)return; const hit=getTerrainHit(event); if(!hit||!selected)return; event.preventDefault(); isSculptingTerrain=true; flattenHeight=selected.object.worldToLocal(hit.point.clone()).z; sculptTerrain(selected.object as THREE.Mesh,hit.point,sculptMode,brushRadius,brushStrength,flattenHeight); renderer.domElement.setPointerCapture(event.pointerId); });
-renderer.domElement.addEventListener('pointermove',event=>{ if(!terrainSculptActive)return; const hit=getTerrainHit(event); if(hit){ brushCursor.position.copy(hit.point); brushCursor.position.y+=0.04; brushCursor.scale.setScalar(brushRadius); brushCursor.visible=true; } else brushCursor.visible=false; if(isSculptingTerrain&&hit&&selected)sculptTerrain(selected.object as THREE.Mesh,hit.point,sculptMode,brushRadius,brushStrength,flattenHeight); });
+renderer.domElement.addEventListener('pointerdown',event=>{ if(!terrainSculptActive||event.button!==0||isPointerLocked)return; const hit=getTerrainHit(event); if(!hit||!selected)return; event.preventDefault(); isSculptingTerrain=true; flattenHeight=selected.object.worldToLocal(hit.point.clone()).z; if(terrainToolMode==='paint'&&hit.uv) paintTerrainAt(selected.object as THREE.Mesh,hit.uv); else if(terrainToolMode==='sculpt') sculptTerrain(selected.object as THREE.Mesh,hit.point,sculptMode,brushRadius,brushStrength,flattenHeight); renderer.domElement.setPointerCapture(event.pointerId); });
+renderer.domElement.addEventListener('pointermove',event=>{ if(!terrainSculptActive)return; const hit=getTerrainHit(event); if(hit){ brushCursor.position.copy(hit.point); brushCursor.position.y+=0.04; brushCursor.scale.setScalar(brushRadius); brushCursor.visible=true; } else brushCursor.visible=false; if(isSculptingTerrain&&hit&&selected){ if(terrainToolMode==='paint'&&hit.uv)paintTerrainAt(selected.object as THREE.Mesh,hit.uv); else if(terrainToolMode==='sculpt')sculptTerrain(selected.object as THREE.Mesh,hit.point,sculptMode,brushRadius,brushStrength,flattenHeight); } });
 const stopTerrainSculpt=()=>{isSculptingTerrain=false;}; renderer.domElement.addEventListener('pointerup',stopTerrainSculpt); renderer.domElement.addEventListener('pointercancel',stopTerrainSculpt); window.addEventListener('pointerup',stopTerrainSculpt);
 
 document.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach(button => {
@@ -1220,6 +1344,15 @@ async function loadWorld(world: WorldDocument) {
       }
       object = new THREE.Mesh(geometry, material);
       if (type === 'terrain') { object.rotation.x = -Math.PI / 2; object.position.y = 0.015; }
+      if (type === 'terrain' && (object as THREE.Mesh).material instanceof THREE.MeshStandardMaterial) {
+        const restoredMaterial = (object as THREE.Mesh).material as THREE.MeshStandardMaterial;
+        if (restoredMaterial.map) {
+          const restoredImage = restoredMaterial.map.image as CanvasImageSource;
+          createTerrainPaintMap(object as THREE.Mesh, restoredImage);
+        } else {
+          createTerrainPaintMap(object as THREE.Mesh);
+        }
+      }
       (object as THREE.Mesh).castShadow = true;
       (object as THREE.Mesh).receiveShadow = true;
     } else if (data.kind === 'pointLight') {
