@@ -260,3 +260,90 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .top-actions button { padding: 7px 8px; }
   .project-card { align-items: flex-start; flex-direction: column; }
 }
+
+/* Application dashboard and preferences */
+:root { --accent: #d2b16d; --ui-bg: #111318; --panel-bg: #191c23; --panel-border: #30343e; --ui-text: #e5e7eb; --muted-text: #8993a2; }
+.hidden { display: none !important; }
+.editor-screen { height: 100%; min-height: 0; display: flex; flex-direction: column; }
+.project-dashboard { position: fixed; inset: 0; z-index: 40; overflow-y: auto; background: var(--ui-bg); color: var(--ui-text); }
+.project-dashboard.visible { display: block; }
+.dashboard-shell { width: min(1180px, calc(100% - 56px)); margin: 0 auto; padding-bottom: 64px; }
+.dashboard-header { height: 76px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--panel-border); }
+.dashboard-welcome { padding: 54px 0 30px; }
+.dashboard-welcome h1 { margin: 8px 0; font-size: clamp(32px, 5vw, 48px); letter-spacing: -1.5px; }
+.dashboard-welcome .muted { margin: 0; font-size: 14px; }
+.dashboard-create { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 22px; border: 1px solid var(--panel-border); border-radius: 12px; background: var(--panel-bg); }
+.dashboard-create > div:first-child { display: grid; gap: 6px; }
+.dashboard-create strong { font-size: 14px; }
+.dashboard-create span, .dashboard-section-heading span { color: var(--muted-text); font-size: 11px; }
+.dashboard-create .new-project-row { margin: 0; min-width: min(480px, 55%); }
+.dashboard-section-heading { display: flex; align-items: center; justify-content: space-between; margin: 34px 0 14px; }
+.dashboard-section-heading h2 { margin: 0; font-size: 17px; }
+.dashboard-project-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.dashboard-project-grid .project-card { min-height: 150px; align-items: stretch; flex-direction: column; justify-content: space-between; border-color: var(--panel-border); background: var(--panel-bg); }
+.dashboard-project-grid .project-card::before { content: "✦"; display: grid; place-items: center; height: 58px; border-radius: 6px; background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 24%, transparent), #263246); color: var(--accent); font-size: 24px; }
+.dashboard-project-grid .project-card-details strong { font-size: 14px; }
+.dashboard-project-grid .project-card-actions { justify-content: flex-end; }
+.dashboard-project-grid .project-card-actions button { padding: 7px 11px; }
+.project-empty { grid-column: 1 / -1; padding: 28px; border: 1px dashed var(--panel-border); border-radius: 9px; text-align: center; }
+.primary-button, .secondary-button { border-radius: 6px; padding: 9px 14px; font-size: 12px; }
+.primary-button, #create-project-button { background: var(--accent); border: 1px solid var(--accent); color: #171717; font-weight: 700; }
+.secondary-button { background: var(--panel-bg); border: 1px solid var(--panel-border); color: var(--ui-text); }
+.top-actions button:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.settings-panel { display: none; position: fixed; inset: 0; z-index: 60; place-items: center; padding: 24px; background: rgba(4,6,10,.78); backdrop-filter: blur(8px); }
+.settings-panel.visible { display: grid; }
+.settings-window { width: min(620px, 100%); max-height: min(820px, 92vh); overflow: auto; border: 1px solid var(--panel-border); border-radius: 12px; background: var(--panel-bg); color: var(--ui-text); box-shadow: 0 24px 90px rgba(0,0,0,.5); }
+.settings-header, .settings-footer { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid var(--panel-border); }
+.settings-header h2 { margin: 4px 0 0; font-size: 23px; }
+.settings-content { padding: 4px 24px; }
+.settings-section { padding: 20px 0; border-bottom: 1px solid var(--panel-border); }
+.settings-section h3 { margin: 0 0 13px; font-size: 12px; letter-spacing: .8px; text-transform: uppercase; }
+.settings-field, .keybinding-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 11px 0; font-size: 12px; }
+.settings-field select, .accent-editor input[type="text"] { min-width: 150px; padding: 8px 10px; border: 1px solid var(--panel-border); border-radius: 5px; background: var(--ui-bg); color: var(--ui-text); }
+.accent-editor { display: flex; align-items: center; gap: 12px; margin: 14px 0; }
+.accent-editor input[type="color"] { width: 54px; height: 42px; padding: 3px; border: 1px solid var(--panel-border); border-radius: 6px; background: var(--ui-bg); cursor: pointer; }
+.accent-presets { display: flex; gap: 10px; }
+.accent-presets button { width: 25px; height: 25px; border: 2px solid rgba(255,255,255,.28); border-radius: 50%; background: var(--swatch); cursor: pointer; }
+.keybinding-row button { min-width: 105px; padding: 7px 12px; border: 1px solid var(--panel-border); border-radius: 5px; background: var(--ui-bg); color: var(--ui-text); font-family: ui-monospace, monospace; }
+.keybinding-row button.listening { border-color: var(--accent); color: var(--accent); }
+.settings-footer { border-top: 1px solid var(--panel-border); border-bottom: 0; }
+.save-status { color: var(--accent); }
+.brand { color: var(--accent); }
+.eyebrow { color: var(--accent); }
+.tool.active, .wide-button { border-color: var(--accent); }
+.object-entry.selected { outline: 1px solid color-mix(in srgb, var(--accent) 60%, transparent); }
+[data-density="compact"] .panel-heading, [data-density="compact"] .asset-heading { padding-top: 9px; padding-bottom: 9px; }
+[data-density="compact"] .object-entry { padding-top: 6px; padding-bottom: 6px; }
+[data-density="compact"] .property-group { margin: 10px 0; }
+[data-density="compact"] .topbar { height: 46px; }
+html[data-theme="light"] { --ui-bg: #edf0f4; --panel-bg: #ffffff; --panel-border: #d3d9e2; --ui-text: #202733; --muted-text: #667085; color-scheme: light; }
+html[data-theme="light"] body, html[data-theme="light"] #app { background: var(--ui-bg); color: var(--ui-text); }
+html[data-theme="light"] .topbar, html[data-theme="light"] .panel, html[data-theme="light"] .asset-panel, html[data-theme="light"] .viewport-toolbar, html[data-theme="light"] .viewport-footer { background: var(--panel-bg); border-color: var(--panel-border); color: var(--ui-text); }
+html[data-theme="light"] .viewport-area { background: #dce2e9; }
+html[data-theme="light"] .top-actions button, html[data-theme="light"] .asset-buttons button, html[data-theme="light"] .file-button, html[data-theme="light"] .tool, html[data-theme="light"] .secondary-button { background: #f3f5f8; color: #273142; border-color: #cbd3de; }
+html[data-theme="light"] .property-row input, html[data-theme="light"] .new-project-row input { background: #fff; color: #202733; border-color: #cbd3de; }
+html[data-theme="light"] .object-entry { color: #485365; }
+html[data-theme="light"] .object-entry.selected, html[data-theme="light"] .tool.active { background: color-mix(in srgb, var(--accent) 24%, white); color: #202733; }
+html[data-theme="light"] .dashboard-create, html[data-theme="light"] .dashboard-project-grid .project-card { background: #fff; }
+html[data-theme="light"] .settings-window { background: #fff; }
+html[data-theme="light"] .settings-field select, html[data-theme="light"] .accent-editor input[type="text"], html[data-theme="light"] .keybinding-row button { background: #f7f8fa; color: #202733; }
+html[data-theme="light"] .manager-close { color: #485365; }
+html[data-theme="system"] { color-scheme: dark; }
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] { --ui-bg: #edf0f4; --panel-bg: #ffffff; --panel-border: #d3d9e2; --ui-text: #202733; --muted-text: #667085; color-scheme: light; }
+  html[data-theme="system"] .topbar, html[data-theme="system"] .panel, html[data-theme="system"] .asset-panel, html[data-theme="system"] .viewport-toolbar, html[data-theme="system"] .viewport-footer { background: var(--panel-bg); border-color: var(--panel-border); color: var(--ui-text); }
+  html[data-theme="system"] .viewport-area { background: #dce2e9; }
+  html[data-theme="system"] .top-actions button, html[data-theme="system"] .asset-buttons button, html[data-theme="system"] .file-button, html[data-theme="system"] .tool, html[data-theme="system"] .secondary-button { background: #f3f5f8; color: #273142; border-color: #cbd3de; }
+  html[data-theme="system"] .property-row input, html[data-theme="system"] .new-project-row input { background: #fff; color: #202733; border-color: #cbd3de; }
+  html[data-theme="system"] .object-entry { color: #485365; }
+  html[data-theme="system"] .dashboard-create, html[data-theme="system"] .dashboard-project-grid .project-card, html[data-theme="system"] .settings-window { background: #fff; }
+}
+@media (max-width: 760px) {
+  .dashboard-shell { width: calc(100% - 28px); }
+  .dashboard-create { align-items: stretch; flex-direction: column; }
+  .dashboard-create .new-project-row { min-width: 0; }
+  .new-project-row { flex-direction: column; }
+  .settings-panel { padding: 10px; }
+  .settings-content { padding: 4px 16px; }
+  .settings-header, .settings-footer { padding: 16px; }
+}
