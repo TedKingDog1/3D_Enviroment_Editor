@@ -651,3 +651,12 @@ html[data-theme="system"] :focus-visible {
 
 .viewport-area { position: relative; }
 #viewport.sculpting canvas { cursor: crosshair; }
+
+
+/* Terrain texture painting */
+.terrain-tool-tabs{display:flex;gap:5px;padding-right:8px;border-right:1px solid var(--panel-border)}
+.terrain-tool-tabs .tool{padding:7px 10px}
+.terrain-paint-controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.terrain-paint-controls select{padding:6px 8px;border:1px solid var(--panel-border);border-radius:5px;background:var(--ui-bg);color:var(--ui-text);font-size:11px}
+.terrain-paint-controls .terrain-slider input{width:82px}
+@media(max-width:900px){.terrain-paint-controls{width:100%}.terrain-tool-tabs{border-right:0}}
