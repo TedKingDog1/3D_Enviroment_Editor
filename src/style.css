@@ -529,3 +529,108 @@ html[data-theme="light"] :focus-visible,
 html[data-theme="system"] :focus-visible {
   outline-color: #1d4ed8;
 }
+
+
+/* System theme follows the operating system in both directions */
+@media (prefers-color-scheme: light) {
+  html[data-theme="system"] {
+    --danger-bg: #fee2e2;
+    --danger-border: #fca5a5;
+    --danger-text: #991b1b;
+    --danger-hover: #fecaca;
+    --control-bg: #f3f5f8;
+    --control-border: #cbd3de;
+    --control-text: #202733;
+  }
+}
+@media (prefers-color-scheme: dark) {
+  html[data-theme="system"] {
+    --ui-bg: #111318;
+    --panel-bg: #191c23;
+    --panel-border: #30343e;
+    --ui-text: #e5e7eb;
+    --muted-text: #8993a2;
+    --danger-bg: #482b30;
+    --danger-border: #96545d;
+    --danger-text: #ffe8ea;
+    --danger-hover: #66363e;
+    --control-bg: #292e39;
+    --control-border: #424958;
+    --control-text: #e5e7eb;
+    color-scheme: dark;
+  }
+  html[data-theme="system"] #delete-button {
+    background: var(--danger-bg);
+    border-color: var(--danger-border);
+    color: var(--danger-text);
+  }
+  html[data-theme="system"] #delete-button:hover {
+    background: var(--danger-hover);
+    color: #ffffff;
+  }
+  html[data-theme="system"] .top-actions button,
+  html[data-theme="system"] .asset-buttons button,
+  html[data-theme="system"] .file-button,
+  html[data-theme="system"] .tool,
+  html[data-theme="system"] .secondary-button,
+  html[data-theme="system"] .keybinding-row button {
+    background: var(--control-bg);
+    color: var(--control-text);
+    border-color: var(--control-border);
+  }
+  html[data-theme="system"] .top-actions button:hover,
+  html[data-theme="system"] .asset-buttons button:hover,
+  html[data-theme="system"] .file-button:hover,
+  html[data-theme="system"] .tool:hover,
+  html[data-theme="system"] .secondary-button:hover {
+    background: #3a4251;
+    color: #ffffff;
+  }
+  html[data-theme="system"] .tool.active {
+    background: #3a4658;
+    border-color: #59677e;
+    color: #ffffff;
+  }
+  html[data-theme="system"] .wide-button {
+    background: #344052;
+    border-color: #59677e;
+    color: #ffffff;
+  }
+  html[data-theme="system"] .wide-button:hover { background: #43536a; }
+  html[data-theme="system"] .object-entry { color: #b9c0cc; }
+  html[data-theme="system"] .object-entry:hover { background: #252a34; }
+  html[data-theme="system"] .object-entry.selected { background: #344052; color: #ffffff; }
+  html[data-theme="system"] .muted { color: #788292; }
+  html[data-theme="system"] .panel-heading,
+  html[data-theme="system"] .asset-heading { color: #aab2c0; }
+  html[data-theme="system"] .property-row label,
+  html[data-theme="system"] .property-group h3 { color: #aab2c0; }
+  html[data-theme="system"] .viewport-footer { color: #7e899a; }
+  html[data-theme="system"] .world-name { color: #8992a2; }
+  html[data-theme="system"] .world-name b { color: #e1e5eb; }
+  html[data-theme="system"] .save-status { color: var(--accent); }
+  html[data-theme="system"] .asset-note { color: #707b8c; }
+  html[data-theme="system"] .property-row input,
+  html[data-theme="system"] .new-project-row input,
+  html[data-theme="system"] .settings-field select,
+  html[data-theme="system"] .accent-editor input[type="text"] {
+    background: #11151c;
+    color: #e5e7eb;
+    border-color: #3a414d;
+  }
+  html[data-theme="system"] .primary-button,
+  html[data-theme="system"] #create-project-button {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #171717;
+  }
+  html[data-theme="system"] .project-card-actions .project-delete {
+    background: #482b30;
+    border-color: #75434a;
+    color: #ffe8ea;
+  }
+  html[data-theme="system"] .project-card-actions .project-delete:hover {
+    background: #66363e;
+    color: #ffffff;
+  }
+}
