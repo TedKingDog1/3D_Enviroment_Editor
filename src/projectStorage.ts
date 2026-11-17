@@ -39,8 +39,14 @@ export interface ProjectObject {
   rotation: [number, number, number];
   scale: [number, number, number];
   geometry?: {
-    type: 'box' | 'sphere' | 'cylinder' | 'plane' | 'custom';
+    type: 'box' | 'sphere' | 'cylinder' | 'plane' | 'terrain' | 'custom';
     parameters: number[];
+  };
+  terrainData?: {
+    width: number;
+    depth: number;
+    segments: number;
+    heights: number[];
   };
   material?: {
     color: string;
