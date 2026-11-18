@@ -576,11 +576,23 @@ function applySelection(next: Entity[], anchor: Entity | null = next[next.length
   refreshProperties();
 }
 
+function getVisibleOutlinerEntities(): Entity[] {
+  const visible: Entity[] = [];
+  const visit = (folder: ProjectFolder) => {
+    if (collapsedFolders.has(folder.id)) return;
+    entities.filter(entity => entity.folderId === folder.id).forEach(entity => visible.push(entity));
+    folders.filter(child => child.parentId === folder.id).forEach(visit);
+  };
+  folders.filter(folder => !folder.parentId).forEach(visit);
+  entities.filter(entity => !entity.folderId).forEach(entity => visible.push(entity));
+  return visible;
+}
+
 function selectEntity(entity: Entity | null, additive = false, range = false) {
   if (terrainSculptActive && !(entity?.kind === 'mesh' && entity.primitiveType === 'terrain')) setTerrainSculptMode(false);
   if (!entity) { applySelection([]); return; }
   if (range && selectionAnchor) {
-    const visible = entities.filter(item => !item.folderId || !collapsedFolders.has(item.folderId));
+    const visible = getVisibleOutlinerEntities();
     const a = visible.indexOf(selectionAnchor), b = visible.indexOf(entity);
     if (a >= 0 && b >= 0) applySelection(visible.slice(Math.min(a,b), Math.max(a,b)+1), entity);
     else applySelection([entity], entity);
