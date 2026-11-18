@@ -677,3 +677,13 @@ html[data-theme="system"] :focus-visible {
 .github-project-list{min-height:32px}
 .github-project-list .project-card{background:var(--ui-bg)}
 @media(max-width:700px){.github-card{padding:14px}.github-card-heading{align-items:flex-start;flex-direction:column}.github-connect-row{flex-direction:column}.github-connect-row input{min-width:0;width:100%}}
+
+.github-cloud-projects{margin:24px 0;display:grid;gap:12px}
+.github-cloud-projects .github-remote-heading{padding:0;border:0}
+.github-cloud-projects .github-remote-heading strong{font-size:12px;letter-spacing:.5px}
+.github-cloud-projects .github-project-list .project-card{background:var(--panel-bg)}
+.github-settings-section{display:grid;gap:14px}
+.github-settings-section .github-card-heading{margin-bottom:2px}
+.github-settings-section .github-connect-row input{flex:1;min-width:180px;padding:9px 10px;border:1px solid var(--panel-border);border-radius:6px;background:var(--ui-bg);color:var(--ui-text)}
+.github-settings-section .github-connect-row{display:flex;gap:8px;flex-wrap:wrap}
+@media(max-width:700px){.github-settings-section .github-connect-row{flex-direction:column}.github-settings-section .github-connect-row input{width:100%;min-width:0}}
