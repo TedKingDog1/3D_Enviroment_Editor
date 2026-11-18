@@ -716,3 +716,9 @@ html[data-theme="system"] :focus-visible {
 .asset-library-items>.muted{margin:4px 2px;font-size:10px}
 @media(max-width:1050px){.outliner{width:220px}}
 @media(max-width:760px){.outliner{width:185px}.asset-library-heading{align-items:flex-start;flex-direction:column;gap:3px}}
+
+.asset-library-empty{height:100%;min-height:90px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:12px;color:var(--muted-text)}
+.asset-library-empty>span{font-size:19px;color:var(--accent);margin-bottom:5px}
+.asset-library-empty strong{font-size:11px;color:var(--ui-text)}
+.asset-library-empty p{max-width:175px;margin:5px 0;font-size:10px;line-height:1.45}
+.asset-library-empty small{font-size:9px;color:var(--accent)}
