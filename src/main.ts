@@ -12,13 +12,14 @@ import {
   type WorldDocument
 } from './projectStorage';
 import { connectGitHub, listRemoteProjects, loadRemoteProject, saveRemoteProject } from './githubStorage';
+import { createNatureAsset, NATURE_ASSETS, type NatureAssetType } from './assetFactory';
 import './style.css';
 
 interface Entity {
   id: string;
   object: THREE.Object3D;
   kind: EntityKind;
-  primitiveType?: 'box' | 'sphere' | 'cylinder' | 'plane' | 'terrain';
+  primitiveType?: 'box' | 'sphere' | 'cylinder' | 'plane' | 'terrain' | NatureAssetType;
   helper?: THREE.Object3D;
   name: string;
   shadowLayer?: number;
@@ -502,6 +503,24 @@ function addObject(type: string) {
     const helper = new THREE.CameraHelper(camera);
     registerEntity(camera, 'camera', helper);
   }
+}
+
+
+function addNatureAsset(type: NatureAssetType) {
+  const definition = NATURE_ASSETS.find(asset => asset.type === type);
+  if (!definition) return;
+  const geometry = createNatureAsset(type);
+  const material = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.92, metalness: 0 });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.name = `${definition.name} ${++objectNumber}`;
+  const direction = new THREE.Vector3();
+  editorCamera.getWorldDirection(direction);
+  mesh.position.copy(editorCamera.position).add(direction.multiplyScalar(7));
+  mesh.position.y = 0;
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  registerEntity(mesh, 'mesh');
+  entities[entities.length - 1].primitiveType = type;
 }
 
 function selectEntity(entity: Entity | null) {
@@ -1008,6 +1027,36 @@ function updateHelpers() {
   }
 }
 
+
+const assetItems = document.querySelector<HTMLDivElement>('#asset-library-items')!;
+const assetSearch = document.querySelector<HTMLInputElement>('#asset-search')!;
+let activeAssetCategory = 'All';
+function renderAssetLibrary() {
+  const query = assetSearch.value.trim().toLowerCase();
+  const matches = NATURE_ASSETS.filter(asset =>
+    (activeAssetCategory === 'All' || asset.category === activeAssetCategory) &&
+    (asset.name.toLowerCase().includes(query) || asset.description.toLowerCase().includes(query))
+  );
+  assetItems.innerHTML = matches.map(asset => `
+    <button class="asset-card" data-asset="${asset.type}" title="${asset.description}">
+      <span class="asset-card-icon">${asset.icon}</span>
+      <span class="asset-card-name">${asset.name}</span>
+      <span class="asset-card-add">＋</span>
+    </button>`).join('') || '<p class="muted asset-no-results">No assets match your search.</p>';
+  assetItems.querySelectorAll<HTMLButtonElement>('[data-asset]').forEach(button =>
+    button.addEventListener('click', () => addNatureAsset(button.dataset.asset as NatureAssetType))
+  );
+}
+assetSearch.addEventListener('input', renderAssetLibrary);
+document.querySelectorAll<HTMLButtonElement>('[data-asset-category]').forEach(button => {
+  button.addEventListener('click', () => {
+    activeAssetCategory = button.dataset.assetCategory!;
+    document.querySelectorAll('[data-asset-category]').forEach(item => item.classList.toggle('active', item === button));
+    renderAssetLibrary();
+  });
+});
+renderAssetLibrary();
+
 const addMenu = document.querySelector<HTMLDivElement>('#add-menu')!;
 const addMenuToggle = document.querySelector<HTMLButtonElement>('#add-menu-toggle')!;
 function setAddMenuOpen(open: boolean) {
@@ -1193,6 +1242,7 @@ async function serializeWorld(): Promise<WorldDocument> {
         color: `#${material.color.getHexString()}`,
         roughness: material.roughness,
         metalness: material.metalness,
+        vertexColors: material.vertexColors,
         textureDataUrl: material.map ? await textureToDataUrl(material.map) : undefined
       };
       data.lightTransmissionEnabled = Boolean(entity.lightTransmissionEnabled);
@@ -1335,6 +1385,7 @@ async function loadWorld(world: WorldDocument) {
         const terrain = data.terrainData;
         geometry = createTerrainGeometry(terrain?.width ?? 60, terrain?.depth ?? 60, terrain?.segments ?? 80, terrain?.heights);
       } else if (type === 'sphere') geometry = new THREE.SphereGeometry(1, 32, 20);
+      else if (type === 'oakTree' || type === 'pineTree' || type === 'boulder' || type === 'bush' || type === 'grassClump') geometry = createNatureAsset(type);
       else if (type === 'cylinder') geometry = new THREE.CylinderGeometry(0.8, 0.8, 1.8, 32);
       else if (type === 'plane') geometry = new THREE.PlaneGeometry(3, 3);
       else geometry = new THREE.BoxGeometry(1.8, 1.8, 1.8);
@@ -1342,7 +1393,8 @@ async function loadWorld(world: WorldDocument) {
       const material = new THREE.MeshStandardMaterial({
         color: data.material?.color ?? '#b9c5d5',
         roughness: data.material?.roughness ?? 0.72,
-        metalness: data.material?.metalness ?? 0.05
+        metalness: data.material?.metalness ?? 0.05,
+        vertexColors: data.material?.vertexColors ?? false
       });
       if (data.material?.textureDataUrl) {
         const texture = await new Promise<THREE.Texture | null>(resolve => {
@@ -1405,7 +1457,7 @@ async function loadWorld(world: WorldDocument) {
     const entity = entities[entities.length - 1];
     entity.id = data.id;
     if (data.kind === 'mesh') {
-      entity.primitiveType = data.geometry?.type === 'custom' ? 'box' : (data.geometry?.type ?? 'box');
+      entity.primitiveType = data.geometry?.type === 'custom' ? 'box' : (data.geometry?.type ?? 'box') as Entity['primitiveType'];
       entity.lightTransmissionEnabled = Boolean(data.lightTransmissionEnabled);
     }
     loadedById.set(data.id, entity);
