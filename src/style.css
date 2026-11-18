@@ -722,3 +722,12 @@ html[data-theme="system"] :focus-visible {
 .asset-library-empty strong{font-size:11px;color:var(--ui-text)}
 .asset-library-empty p{max-width:175px;margin:5px 0;font-size:10px;line-height:1.45}
 .asset-library-empty small{font-size:9px;color:var(--accent)}
+
+/* Procedural nature asset browser */
+.asset-library-items{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:start;gap:6px}
+.asset-card{position:relative;min-height:76px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;padding:8px 6px;border:1px solid var(--panel-border);border-radius:6px;background:var(--ui-bg);color:var(--ui-text);cursor:pointer;transition:border-color .15s,background .15s,transform .15s}
+.asset-card:hover{border-color:var(--accent);background:var(--control-bg);transform:translateY(-1px)}
+.asset-card-icon{height:29px;display:grid;place-items:center;color:var(--accent);font-size:25px;line-height:1}
+.asset-card-name{font-size:10px;font-weight:650}
+.asset-card-add{position:absolute;right:5px;top:3px;color:var(--muted-text);font-size:13px}
+.asset-no-results{grid-column:1/-1;padding:8px;font-size:10px}
