@@ -349,7 +349,7 @@ function resize() {
 new ResizeObserver(resize).observe(viewport);
 resize();
 
-function registerEntity(object: THREE.Object3D, kind: EntityKind, helper?: THREE.Object3D) {
+function registerEntity(object: THREE.Object3D, kind: EntityKind, helper?: THREE.Object3D, selectAfter = true) {
   const entity: Entity = {
     id: crypto.randomUUID(),
     object,
@@ -409,7 +409,7 @@ function registerEntity(object: THREE.Object3D, kind: EntityKind, helper?: THREE
   scene.add(object);
   if (helper) scene.add(helper);
 
-  selectEntity(entity);
+  if (selectAfter) selectEntity(entity);
   refreshOutliner();
 }
 
@@ -506,19 +506,25 @@ function addObject(type: string) {
 }
 
 
-function addNatureAsset(type: NatureAssetType) {
+function createNatureAssetMesh(type: NatureAssetType) {
   const definition = NATURE_ASSETS.find(asset => asset.type === type);
-  if (!definition) return;
+  if (!definition) return null;
   const geometry = createNatureAsset(type);
   const material = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.92, metalness: 0 });
   const mesh = new THREE.Mesh(geometry, material);
   mesh.name = `${definition.name} ${++objectNumber}`;
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
+function addNatureAsset(type: NatureAssetType) {
+  const mesh = createNatureAssetMesh(type);
+  if (!mesh) return;
   const direction = new THREE.Vector3();
   editorCamera.getWorldDirection(direction);
   mesh.position.copy(editorCamera.position).add(direction.multiplyScalar(7));
   mesh.position.y = 0;
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
   registerEntity(mesh, 'mesh');
   entities[entities.length - 1].primitiveType = type;
 }
@@ -1074,8 +1080,144 @@ document.querySelectorAll<HTMLButtonElement>('[data-add]').forEach(button => {
   });
 });
 
+
+// Asset painting: scatter procedural nature assets across the ground or terrain.
+let assetPaintActive = false;
+let assetBrushRadius = 8;
+let assetBrushDensity = 5;
+let assetPaintType: NatureAssetType = 'oakTree';
+let lastAssetStrokePoint: THREE.Vector3 | null = null;
+const assetPaintRaycaster = new THREE.Raycaster();
+const assetPaintPointer = new THREE.Vector2();
+const assetBrushCursor = new THREE.Mesh(
+  new THREE.RingGeometry(0.94, 1, 48),
+  new THREE.MeshBasicMaterial({ color: 0x9bd18b, side: THREE.DoubleSide, depthTest: false })
+);
+assetBrushCursor.rotation.x = -Math.PI / 2;
+assetBrushCursor.visible = false;
+assetBrushCursor.renderOrder = 21;
+scene.add(assetBrushCursor);
+
+function setAssetPaintMode(active: boolean) {
+  assetPaintActive = active;
+  lastAssetStrokePoint = null;
+  assetBrushCursor.visible = false;
+  transform.enabled = !active && !terrainSculptActive;
+  document.querySelector('#asset-paint-toolbar')?.classList.toggle('hidden', !active);
+  document.querySelector('#asset-paint-toggle')?.classList.toggle('active', active);
+  document.querySelector('#viewport')?.classList.toggle('asset-painting', active);
+  if (active && terrainSculptActive) setTerrainSculptMode(false);
+}
+
+function getAssetPaintSurfaces(): THREE.Object3D[] {
+  return [
+    ground,
+    ...entities.filter(entity => entity.kind === 'mesh' && entity.primitiveType === 'terrain').map(entity => entity.object)
+  ];
+}
+
+function getAssetPaintHit(event: PointerEvent): THREE.Intersection<THREE.Object3D> | null {
+  const bounds = renderer.domElement.getBoundingClientRect();
+  assetPaintPointer.x = ((event.clientX - bounds.left) / bounds.width) * 2 - 1;
+  assetPaintPointer.y = -((event.clientY - bounds.top) / bounds.height) * 2 + 1;
+  assetPaintRaycaster.setFromCamera(assetPaintPointer, editorCamera);
+  return assetPaintRaycaster.intersectObjects(getAssetPaintSurfaces(), false)[0] ?? null;
+}
+
+function assetWouldOverlap(position: THREE.Vector3, scale: number) {
+  const minimumSpacing = 0.72 * scale;
+  return entities.some(entity => {
+    if (!entity.primitiveType || !['oakTree','pineTree','boulder','bush','grassClump'].includes(entity.primitiveType)) return false;
+    const other = entity.object.position;
+    return Math.hypot(other.x - position.x, other.z - position.z) < minimumSpacing;
+  });
+}
+
+function placePaintedAsset(type: NatureAssetType, surfacePoint: THREE.Vector3) {
+  const mesh = createNatureAssetMesh(type);
+  if (!mesh) return false;
+  const randomScale = document.querySelector<HTMLInputElement>('#asset-random-scale')?.checked ?? true;
+  const scale = randomScale ? 0.72 + Math.random() * 0.62 : 1;
+  mesh.scale.setScalar(scale);
+  mesh.rotation.y = Math.random() * Math.PI * 2;
+  const bounds = new THREE.Box3().setFromObject(mesh);
+  mesh.position.set(surfacePoint.x, surfacePoint.y - bounds.min.y, surfacePoint.z);
+  if (assetWouldOverlap(mesh.position, scale)) {
+    mesh.geometry.dispose();
+    (mesh.material as THREE.Material).dispose();
+    return false;
+  }
+  registerEntity(mesh, 'mesh', undefined, false);
+  entities[entities.length - 1].primitiveType = type;
+  return true;
+}
+
+function paintAssetStamp(center: THREE.Vector3) {
+  let placed = 0;
+  const surfaces = getAssetPaintSurfaces();
+  for (let i = 0; i < assetBrushDensity; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const distance = Math.sqrt(Math.random()) * assetBrushRadius;
+    const x = center.x + Math.cos(angle) * distance;
+    const z = center.z + Math.sin(angle) * distance;
+    assetPaintRaycaster.set(new THREE.Vector3(x, center.y + 100, z), new THREE.Vector3(0, -1, 0));
+    const hit = assetPaintRaycaster.intersectObjects(surfaces, false)[0];
+    if (hit && placePaintedAsset(assetPaintType, hit.point)) placed++;
+  }
+  if (placed) refreshOutliner();
+}
+
+document.querySelector<HTMLButtonElement>('#asset-paint-toggle')?.addEventListener('click', () => {
+  if (!assetPaintActive && terrainSculptActive) setTerrainSculptMode(false);
+  setAssetPaintMode(!assetPaintActive);
+});
+document.querySelector<HTMLButtonElement>('#asset-paint-done')?.addEventListener('click', () => setAssetPaintMode(false));
+document.querySelector<HTMLSelectElement>('#asset-paint-type')?.addEventListener('change', event => {
+  assetPaintType = (event.target as HTMLSelectElement).value as NatureAssetType;
+});
+document.querySelector<HTMLInputElement>('#asset-brush-size')?.addEventListener('input', event => {
+  assetBrushRadius = Number((event.target as HTMLInputElement).value);
+  document.querySelector('#asset-brush-size-value')!.textContent = String(assetBrushRadius);
+  assetBrushCursor.scale.setScalar(assetBrushRadius);
+});
+document.querySelector<HTMLInputElement>('#asset-brush-density')?.addEventListener('input', event => {
+  assetBrushDensity = Number((event.target as HTMLInputElement).value);
+  document.querySelector('#asset-brush-density-value')!.textContent = String(assetBrushDensity);
+});
+
+renderer.domElement.addEventListener('pointerdown', event => {
+  if (!assetPaintActive || event.button !== 0 || isPointerLocked) return;
+  const hit = getAssetPaintHit(event);
+  if (!hit) return;
+  event.preventDefault();
+  lastAssetStrokePoint = hit.point.clone();
+  paintAssetStamp(hit.point);
+  renderer.domElement.setPointerCapture(event.pointerId);
+});
+renderer.domElement.addEventListener('pointermove', event => {
+  if (!assetPaintActive) return;
+  const hit = getAssetPaintHit(event);
+  if (!hit) {
+    assetBrushCursor.visible = false;
+    return;
+  }
+  assetBrushCursor.position.copy(hit.point);
+  assetBrushCursor.position.y += 0.05;
+  assetBrushCursor.scale.setScalar(assetBrushRadius);
+  assetBrushCursor.visible = true;
+  if (event.buttons === 1 && (!lastAssetStrokePoint || lastAssetStrokePoint.distanceTo(hit.point) > assetBrushRadius * 0.32)) {
+    paintAssetStamp(hit.point);
+    lastAssetStrokePoint = hit.point.clone();
+  }
+});
+const stopAssetPaintStroke = () => { lastAssetStrokePoint = null; };
+renderer.domElement.addEventListener('pointerup', stopAssetPaintStroke);
+renderer.domElement.addEventListener('pointercancel', stopAssetPaintStroke);
+window.addEventListener('pointerup', stopAssetPaintStroke);
+
 function setTerrainSculptMode(active: boolean) {
-  terrainSculptActive = active; isSculptingTerrain = false; brushCursor.visible = false; transform.enabled = !active;
+  if (active && assetPaintActive) setAssetPaintMode(false);
+  terrainSculptActive = active; isSculptingTerrain = false; brushCursor.visible = false; transform.enabled = !active && !assetPaintActive;
   document.querySelector('#terrain-toolbar')?.classList.toggle('hidden', !active);
   document.querySelector('#terrain-sculpt-toggle')?.classList.toggle('active', active);
   document.querySelector('#viewport')?.classList.toggle('sculpting', active);
