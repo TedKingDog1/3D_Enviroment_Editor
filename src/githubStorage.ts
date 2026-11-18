@@ -10,8 +10,7 @@ async function request<T>(token: string, path: string, init: RequestInit = {}): 
       Accept: 'application/vnd.github+json',
       Authorization: `Bearer ${token}`,
       'X-GitHub-Api-Version': '2022-11-28',
-      ...(init.body ? { 'Content-Type': 'application/json' } : {}),
-      ...(init.headers ?? {})
+      ...(init.body ? { 'Content-Type': 'application/json' } : {})
     }
   });
   const payload = await response.json().catch(() => ({}));
@@ -37,10 +36,6 @@ function encodeBase64(text: string): string {
   let binary = '';
   for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   return btoa(binary);
-}
-function decodeBase64(text: string): string {
-  const binary = atob(text.replace(/\s/g, ''));
-  return new TextDecoder().decode(Uint8Array.from(binary, c => c.charCodeAt(0)));
 }
 function pathFor(id: string) { return `projects/${encodeURIComponent(id)}.json`; }
 export async function connectGitHub(token: string): Promise<void> {
