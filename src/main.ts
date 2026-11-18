@@ -1471,6 +1471,8 @@ async function textureToDataUrl(texture: THREE.Texture): Promise<string | undefi
 }
 
 async function serializeWorld(): Promise<WorldDocument> {
+  // Temporarily restore selected objects to the scene root so saved transforms are world transforms.
+  clearSelectionTransform();
   const objects: ProjectObject[] = await Promise.all(entities.map(async entity => {
     const object = entity.object;
     const data: ProjectObject = {
@@ -1539,6 +1541,7 @@ async function serializeWorld(): Promise<WorldDocument> {
     }
     return data;
   }));
+  attachSelectionTransform();
 
   return {
     schemaVersion: 1,
