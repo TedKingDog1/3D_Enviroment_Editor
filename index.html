@@ -134,9 +134,13 @@
           <div id="object-list"></div>
           <section class="asset-library">
             <div class="asset-library-heading"><strong>ASSET LIBRARY</strong><span>ENVIRONMENT OBJECTS</span></div>
-            <div id="asset-library-items" class="asset-library-items">
-              <div class="asset-library-empty"><span>✦</span><strong>Environment assets</strong><p>Reusable trees, rocks, vegetation, and scene props will live here.</p><small>Starter asset collection is the next step.</small></div>
+            <input id="asset-search" class="asset-search" type="search" placeholder="Search assets...">
+            <div class="asset-category-row">
+              <button class="asset-category active" data-asset-category="All">All</button>
+              <button class="asset-category" data-asset-category="Trees">Trees</button>
+              <button class="asset-category" data-asset-category="Ground">Ground</button>
             </div>
+            <div id="asset-library-items" class="asset-library-items"></div>
           </section>
         </aside>
 
