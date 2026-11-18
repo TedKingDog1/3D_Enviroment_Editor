@@ -1660,6 +1660,7 @@ async function showProjectManager() {
   projectManager.classList.add('visible');
   document.querySelector('#editor-screen')?.classList.add('hidden');
   await refreshProjectList();
+  if (getGitHubToken()) await refreshGitHubProjects();
 }
 
 document.querySelector<HTMLButtonElement>('#project-manager-button')!
