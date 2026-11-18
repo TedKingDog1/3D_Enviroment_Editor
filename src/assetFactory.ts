@@ -19,8 +19,17 @@ function part(geometry: THREE.BufferGeometry, color: THREE.ColorRepresentation, 
 }
 
 function combine(parts: THREE.BufferGeometry[]) {
-  const merged = mergeGeometries(parts, false);
-  parts.forEach(g => g.dispose());
+  // Normalize indexed and non-indexed primitives before merging.
+  // Cylinder/Cone geometries are indexed, while Polyhedron geometries
+  // such as IcosahedronGeometry may be non-indexed.
+  const normalized = parts.map(g => {
+    if (!g.index) return g;
+    const converted = g.toNonIndexed();
+    g.dispose();
+    return converted;
+  });
+  const merged = mergeGeometries(normalized, false);
+  normalized.forEach(g => g.dispose());
   if (!merged) throw new Error('Could not combine procedural asset geometry.');
   merged.computeBoundingSphere();
   return merged;
