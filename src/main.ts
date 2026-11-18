@@ -1277,6 +1277,13 @@ document.querySelector<HTMLButtonElement>('#asset-paint-toggle')?.addEventListen
 document.querySelector<HTMLButtonElement>('#asset-paint-done')?.addEventListener('click', () => setAssetPaintMode(false));
 document.querySelector<HTMLSelectElement>('#asset-paint-type')?.addEventListener('change', event => {
   assetPaintType = (event.target as HTMLSelectElement).value as NatureAssetType;
+  if (assetPaintActive) {
+    const name = NATURE_ASSETS.find(asset => asset.type === assetPaintType)?.name ?? 'Assets';
+    const folder: ProjectFolder = { id: crypto.randomUUID(), name: `${name} Painted ${folders.filter(item => item.name.startsWith(name + ' Painted')).length + 1}` };
+    folders.push(folder);
+    activePaintFolderId = folder.id;
+    refreshOutliner();
+  }
 });
 document.querySelector<HTMLInputElement>('#asset-brush-size')?.addEventListener('input', event => {
   assetBrushRadius = Number((event.target as HTMLInputElement).value);
