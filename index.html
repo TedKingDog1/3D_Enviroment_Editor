@@ -28,19 +28,9 @@
             <button id="create-project-button">＋ New Project</button>
           </div>
         </div>
-        <section class="github-card">
-          <div class="github-card-heading">
-            <div><strong>GITHUB CLOUD BACKUP</strong><span>Sync environments with your private repository.</span></div>
-            <span id="github-status" class="github-status">Not connected</span>
-          </div>
-          <div class="github-connect-row">
-            <input id="github-token" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your fine-grained GitHub token">
-            <button id="github-connect-button" class="primary-button">Connect</button>
-            <button id="github-disconnect-button" class="secondary-button">Disconnect</button>
-          </div>
-          <p class="muted github-security-note">Token stays in this browser tab's session storage. Disconnect clears it here; revoke it separately in GitHub to invalidate it.</p>
-          <div class="github-remote-heading"><strong>Cloud Projects</strong><button id="github-refresh-button" class="secondary-button">Refresh</button></div>
-          <div id="github-project-list" class="project-list github-project-list"><p class="muted">Connect to view projects in GitHub.</p></div>
+        <section class="github-cloud-projects">
+          <div class="github-remote-heading"><strong>GitHub Cloud Projects</strong><button id="github-refresh-button" class="secondary-button">Refresh</button></div>
+          <div id="github-project-list" class="project-list github-project-list"><p class="muted">Connect GitHub in Settings to view cloud projects.</p></div>
         </section>
         <div class="dashboard-section-heading">
           <h2>Your Projects</h2>
@@ -65,6 +55,18 @@
             <label class="settings-field"><span>Interface density</span>
               <select id="density-select"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select>
             </label>
+          </section>
+          <section class="settings-section github-settings-section">
+            <div class="github-card-heading">
+              <div><strong>GITHUB CLOUD BACKUP</strong><span>Connect this editor to your private environment-project repository.</span></div>
+              <span id="github-status" class="github-status">Not connected</span>
+            </div>
+            <div class="github-connect-row">
+              <input id="github-token" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your fine-grained GitHub token">
+              <button id="github-connect-button" class="primary-button">Connect</button>
+              <button id="github-disconnect-button" class="secondary-button">Disconnect</button>
+            </div>
+            <p class="muted github-security-note">Token stays in this browser tab's session storage. Disconnect clears it here; revoke it separately in GitHub to invalidate it.</p>
           </section>
           <section class="settings-section">
             <h3>Accent color</h3>
