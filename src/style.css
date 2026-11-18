@@ -731,3 +731,13 @@ html[data-theme="system"] :focus-visible {
 .asset-card-name{font-size:10px;font-weight:650}
 .asset-card-add{position:absolute;right:5px;top:3px;color:var(--muted-text);font-size:13px}
 .asset-no-results{grid-column:1/-1;padding:8px;font-size:10px}
+
+
+/* Nature asset scatter-paint mode */
+.asset-paint-toolbar{position:absolute;z-index:9;top:112px;left:12px;display:flex;align-items:center;flex-wrap:wrap;gap:12px;max-width:calc(100% - 24px);padding:10px 12px;border:1px solid var(--panel-border);border-radius:8px;background:var(--panel-bg);color:var(--ui-text);box-shadow:0 8px 28px rgba(0,0,0,.24)}
+.asset-paint-toolbar select{padding:6px 8px;border:1px solid var(--panel-border);border-radius:5px;background:var(--ui-bg);color:var(--ui-text);font-size:11px}
+.asset-paint-toolbar .terrain-slider input{width:86px;accent-color:var(--accent)}
+.asset-random-scale{display:flex;align-items:center;gap:6px;color:var(--ui-text);font-size:10px;white-space:nowrap}
+.asset-random-scale input{accent-color:var(--accent)}
+#viewport.asset-painting canvas{cursor:crosshair}
+@media(max-width:900px){.asset-paint-toolbar{right:8px;left:8px;top:150px;gap:8px}.asset-paint-toolbar .terrain-toolbar-title{width:100%}.asset-paint-toolbar .terrain-slider input{width:70px}}
