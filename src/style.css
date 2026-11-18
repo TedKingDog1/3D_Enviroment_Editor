@@ -687,3 +687,32 @@ html[data-theme="system"] :focus-visible {
 .github-settings-section .github-connect-row input{flex:1;min-width:180px;padding:9px 10px;border:1px solid var(--panel-border);border-radius:6px;background:var(--ui-bg);color:var(--ui-text)}
 .github-settings-section .github-connect-row{display:flex;gap:8px;flex-wrap:wrap}
 @media(max-width:700px){.github-settings-section .github-connect-row{flex-direction:column}.github-settings-section .github-connect-row input{width:100%;min-width:0}}
+
+
+/* Outliner Add menu and docked Asset Library */
+.outliner{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.add-menu-wrap{position:relative;z-index:12;padding:9px;border-bottom:1px solid var(--panel-border);flex-shrink:0}
+.add-menu-toggle{width:100%;display:flex;justify-content:space-between;align-items:center;padding:9px 11px;border:1px solid var(--panel-border);border-radius:5px;background:var(--control-bg);color:var(--control-text);font-size:12px;font-weight:700;cursor:pointer}
+.add-menu-toggle:hover{border-color:var(--accent)}
+.add-menu{position:absolute;top:calc(100% - 2px);left:9px;right:9px;max-height:min(65vh,440px);overflow-y:auto;padding:8px;background:var(--panel-bg);border:1px solid var(--panel-border);border-radius:6px;box-shadow:0 12px 30px rgba(0,0,0,.35)}
+.add-menu.hidden{display:none}
+.add-menu-group{display:grid;gap:3px;padding:5px 0}
+.add-menu-group+.add-menu-group{border-top:1px solid var(--panel-border)}
+.add-menu-group>span{padding:4px 7px;color:var(--muted-text);font-size:9px;font-weight:800;letter-spacing:1px}
+.add-menu-group button,.add-texture-button{padding:8px 9px;text-align:left;border:0;border-radius:4px;background:transparent;color:var(--ui-text);font-size:11px;cursor:pointer}
+.add-menu-group button:hover,.add-texture-button:hover{background:var(--control-bg)}
+.add-texture-button{display:block}
+.outliner-heading{flex-shrink:0}
+#object-list{flex:1;min-height:90px;overflow-y:auto;scrollbar-width:thin}
+.asset-library{height:42%;min-height:170px;max-height:330px;flex-shrink:0;display:flex;flex-direction:column;border-top:1px solid var(--panel-border);background:var(--panel-bg)}
+.asset-library-heading{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:11px 10px 7px}
+.asset-library-heading strong{font-size:10px;letter-spacing:1px;color:var(--ui-text)}
+.asset-library-heading span{font-size:8px;letter-spacing:.7px;color:var(--muted-text)}
+.asset-search{margin:5px 9px;padding:7px 8px;border:1px solid var(--panel-border);border-radius:4px;background:var(--ui-bg);color:var(--ui-text);font-size:11px}
+.asset-category-row{display:flex;gap:4px;padding:3px 9px 7px}
+.asset-category{flex:1;padding:5px 3px;border:1px solid transparent;border-radius:4px;background:transparent;color:var(--muted-text);font-size:10px;cursor:pointer}
+.asset-category.active{background:var(--control-bg);border-color:var(--panel-border);color:var(--ui-text)}
+.asset-library-items{flex:1;min-height:0;overflow-y:auto;padding:4px 9px 10px;scrollbar-width:thin}
+.asset-library-items>.muted{margin:4px 2px;font-size:10px}
+@media(max-width:1050px){.outliner{width:220px}}
+@media(max-width:760px){.outliner{width:185px}.asset-library-heading{align-items:flex-start;flex-direction:column;gap:3px}}
