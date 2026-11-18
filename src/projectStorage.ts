@@ -39,7 +39,7 @@ export interface ProjectObject {
   rotation: [number, number, number];
   scale: [number, number, number];
   geometry?: {
-    type: 'box' | 'sphere' | 'cylinder' | 'plane' | 'terrain' | 'custom';
+    type: 'box' | 'sphere' | 'cylinder' | 'plane' | 'terrain' | 'custom' | 'oakTree' | 'pineTree' | 'boulder' | 'bush' | 'grassClump';
     parameters: number[];
   };
   terrainData?: {
@@ -53,6 +53,7 @@ export interface ProjectObject {
     roughness: number;
     metalness: number;
     textureDataUrl?: string;
+    vertexColors?: boolean;
   };
   light?: {
     color: string;
