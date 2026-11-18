@@ -741,3 +741,15 @@ html[data-theme="system"] :focus-visible {
 .asset-random-scale input{accent-color:var(--accent)}
 #viewport.asset-painting canvas{cursor:crosshair}
 @media(max-width:900px){.asset-paint-toolbar{right:8px;left:8px;top:150px;gap:8px}.asset-paint-toolbar .terrain-toolbar-title{width:100%}.asset-paint-toolbar .terrain-slider input{width:70px}}
+
+/* Folder hierarchy and multi-selection */
+.outliner-folder-actions{display:flex;gap:4px;padding:6px 8px;border-bottom:1px solid var(--panel-border)}
+.outliner-folder-actions button{flex:1;padding:5px 3px;border:1px solid var(--panel-border);border-radius:4px;background:var(--control-bg);color:var(--control-text);font-size:9px;cursor:pointer}
+.outliner-folder-actions button:hover{border-color:var(--accent)}
+.outliner-folder-row{display:flex;align-items:center;gap:2px;min-height:27px;padding-right:5px}
+.outliner-folder-toggle,.outliner-folder-label{border:0;background:transparent;color:var(--ui-text);cursor:pointer}
+.outliner-folder-toggle{width:20px;padding:3px;color:var(--muted-text)}
+.outliner-folder-label{flex:1;text-align:left;padding:5px 4px;border-radius:4px;font-size:11px}
+.outliner-folder-label:hover,.outliner-folder-label.active{background:var(--control-bg);color:var(--accent)}
+.object-entry.selected{outline:1px solid color-mix(in srgb,var(--accent) 55%,transparent)}
+.object-entry{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
