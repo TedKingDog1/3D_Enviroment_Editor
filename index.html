@@ -114,8 +114,36 @@
 
       <main class="workspace">
         <aside class="outliner panel">
-          <div class="panel-heading">WORLD OUTLINER</div>
+          <div class="add-menu-wrap">
+            <button id="add-menu-toggle" class="add-menu-toggle" aria-expanded="false">＋ Add... <span>▾</span></button>
+            <div id="add-menu" class="add-menu hidden">
+              <div class="add-menu-group">
+                <span>MESHES</span>
+                <button data-add="box">Cube</button><button data-add="sphere">Sphere</button><button data-add="cylinder">Cylinder</button><button data-add="plane">Plane</button><button data-add="terrain">Terrain</button>
+              </div>
+              <div class="add-menu-group">
+                <span>LIGHTS & CAMERAS</span>
+                <button data-add="pointLight">Point Light</button><button data-add="directionalLight">Sun Light</button><button data-add="spotLight">Spotlight</button><button data-add="camera">Camera</button>
+              </div>
+              <div class="add-menu-group">
+                <label class="add-texture-button">Texture<input id="texture-file" type="file" accept="image/*" hidden></label>
+              </div>
+            </div>
+          </div>
+          <div class="outliner-heading panel-heading">WORLD OUTLINER</div>
           <div id="object-list"></div>
+          <section class="asset-library">
+            <div class="asset-library-heading"><strong>ASSET LIBRARY</strong><span>ENVIRONMENT OBJECTS</span></div>
+            <input id="asset-search" class="asset-search" type="search" placeholder="Search assets...">
+            <div class="asset-category-row">
+              <button class="asset-category active" data-asset-category="all">All</button>
+              <button class="asset-category" data-asset-category="nature">Nature</button>
+              <button class="asset-category" data-asset-category="props">Props</button>
+            </div>
+            <div id="asset-library-items" class="asset-library-items">
+              <p class="muted">Your reusable environment assets will appear here.</p>
+            </div>
+          </section>
         </aside>
 
         <section class="viewport-area">
@@ -156,24 +184,7 @@
         </aside>
       </main>
 
-      <footer class="asset-panel">
-        <div class="asset-heading">CREATE OBJECT</div>
-        <div class="asset-buttons">
-          <button data-add="box">＋ Cube</button>
-          <button data-add="sphere">＋ Sphere</button>
-          <button data-add="cylinder">＋ Cylinder</button>
-          <button data-add="plane">＋ Plane</button>
-          <button data-add="terrain">＋ Terrain</button>
-          <button data-add="pointLight">＋ Point Light</button>
-          <button data-add="directionalLight">＋ Sun Light</button>
-          <button data-add="spotLight">＋ Spotlight</button>
-          <button data-add="camera">＋ Camera</button>
-          <label class="file-button">＋ Texture
-            <input id="texture-file" type="file" accept="image/*" hidden />
-          </label>
-        </div>
-        <span class="asset-note">Select an object to edit its properties.</span>
-      </footer>
+
     </div>
   </div>
   <script type="module" src="/src/main.ts"></script>
