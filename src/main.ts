@@ -1008,8 +1008,21 @@ function updateHelpers() {
   }
 }
 
+const addMenu = document.querySelector<HTMLDivElement>('#add-menu')!;
+const addMenuToggle = document.querySelector<HTMLButtonElement>('#add-menu-toggle')!;
+function setAddMenuOpen(open: boolean) {
+  addMenu.classList.toggle('hidden', !open);
+  addMenuToggle.setAttribute('aria-expanded', String(open));
+}
+addMenuToggle.addEventListener('click', () => setAddMenuOpen(addMenu.classList.contains('hidden')));
+document.addEventListener('click', event => {
+  if (!(event.target as HTMLElement).closest('.add-menu-wrap')) setAddMenuOpen(false);
+});
 document.querySelectorAll<HTMLButtonElement>('[data-add]').forEach(button => {
-  button.addEventListener('click', () => addObject(button.dataset.add!));
+  button.addEventListener('click', () => {
+    addObject(button.dataset.add!);
+    setAddMenuOpen(false);
+  });
 });
 
 function setTerrainSculptMode(active: boolean) {
