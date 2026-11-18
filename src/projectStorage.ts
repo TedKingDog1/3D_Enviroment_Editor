@@ -72,12 +72,16 @@ export interface ProjectObject {
   targetPosition?: [number, number, number];
   lightTransmissionEnabled?: boolean;
   shadowExcludedLightIds?: string[];
+  folderId?: string;
 }
+
+export interface ProjectFolder { id: string; name: string; parentId?: string; collapsed?: boolean; }
 
 export interface WorldDocument {
   schemaVersion: 1;
   settings: WorldSettings;
   objects: ProjectObject[];
+  folders?: ProjectFolder[];
   editorCamera: {
     position: [number, number, number];
     rotation: [number, number, number];
