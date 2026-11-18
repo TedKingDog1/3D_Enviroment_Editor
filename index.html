@@ -151,6 +151,7 @@
             <button data-tool="scale" class="tool">Scale</button>
             <button id="preview-camera" class="tool">Preview Camera</button>
             <button id="terrain-sculpt-toggle" class="tool">Sculpt Terrain</button>
+            <button id="asset-paint-toggle" class="tool">Paint Assets</button>
             <span class="viewport-hint">Right-click to fly · WASD · Q/E · Shift</span>
           </div>
           <div id="terrain-toolbar" class="terrain-toolbar hidden">
@@ -166,6 +167,19 @@
             <label class="terrain-slider">Brush size <input id="terrain-brush-size" type="range" min="1" max="15" step="0.5" value="5"><b id="terrain-brush-size-value">5.0</b></label>
             <label class="terrain-slider">Strength <input id="terrain-brush-strength" type="range" min="0.1" max="1" step="0.05" value="0.5"><b id="terrain-brush-strength-value">50%</b></label>
             <button id="terrain-sculpt-done" class="secondary-button">Done</button>
+          </div>
+          <div id="asset-paint-toolbar" class="asset-paint-toolbar hidden">
+            <div class="terrain-toolbar-title"><strong>ASSET PAINT</strong><span>Click and drag across the ground or terrain</span></div>
+            <label class="terrain-slider">Asset
+              <select id="asset-paint-type">
+                <option value="oakTree">Oak Tree</option><option value="pineTree">Pine Tree</option>
+                <option value="bush">Bush</option><option value="boulder">Boulder</option><option value="grassClump">Grass Clump</option>
+              </select>
+            </label>
+            <label class="terrain-slider">Brush size <input id="asset-brush-size" type="range" min="2" max="24" step="1" value="8"><b id="asset-brush-size-value">8</b></label>
+            <label class="terrain-slider">Density <input id="asset-brush-density" type="range" min="1" max="12" step="1" value="5"><b id="asset-brush-density-value">5</b></label>
+            <label class="asset-random-scale"><input id="asset-random-scale" type="checkbox" checked> Random scale</label>
+            <button id="asset-paint-done" class="secondary-button">Done</button>
           </div>
           <div id="viewport"></div>
           <div class="viewport-footer">
