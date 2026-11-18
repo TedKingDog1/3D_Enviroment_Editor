@@ -1699,7 +1699,7 @@ document.querySelector<HTMLButtonElement>('#save-button')!
 
 document.querySelector<HTMLButtonElement>('#save-github-button')!.addEventListener('click', async () => {
   const token = getGitHubToken();
-  if (!token) { alert('Connect GitHub from the Projects dashboard first.'); return; }
+  if (!token) { alert('Connect GitHub in Settings first.'); return; }
   if (!currentProject) { alert('Open or create a project before saving it to GitHub.'); return; }
   const button = document.querySelector<HTMLButtonElement>('#save-github-button')!;
   button.disabled = true;
