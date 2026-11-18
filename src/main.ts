@@ -11,6 +11,7 @@ import {
   type StoredProject,
   type WorldDocument
 } from './projectStorage';
+import { connectGitHub, listRemoteProjects, loadRemoteProject, saveRemoteProject } from './githubStorage';
 import './style.css';
 
 interface Entity {
@@ -1490,6 +1491,104 @@ document.querySelector<HTMLButtonElement>('#reset-preferences')?.addEventListene
 });
 applyPreferences();
 
+
+const githubTokenKey = 'ces-github-token-session';
+const githubTokenInput = document.querySelector<HTMLInputElement>('#github-token')!;
+const githubStatus = document.querySelector<HTMLSpanElement>('#github-status')!;
+const githubProjectList = document.querySelector<HTMLDivElement>('#github-project-list')!;
+function getGitHubToken(): string | null {
+  try { return sessionStorage.getItem(githubTokenKey); } catch { return null; }
+}
+function setGitHubStatus(message: string, connected = false) {
+  githubStatus.textContent = message;
+  githubStatus.classList.toggle('connected', connected);
+}
+async function refreshGitHubProjects() {
+  const token = getGitHubToken();
+  githubProjectList.innerHTML = '';
+  if (!token) {
+    githubProjectList.innerHTML = '<p class="muted">Connect to view projects in GitHub.</p>';
+    return;
+  }
+  githubProjectList.innerHTML = '<p class="muted">Loading cloud projects…</p>';
+  try {
+    const projects = await listRemoteProjects(token);
+    githubProjectList.innerHTML = '';
+    if (!projects.length) {
+      githubProjectList.innerHTML = '<p class="muted">No cloud projects yet. Open a local project and choose “Save to GitHub”.</p>';
+      return;
+    }
+    for (const project of projects) {
+      const card = document.createElement('div');
+      card.className = 'project-card';
+      const details = document.createElement('div');
+      details.className = 'project-card-details';
+      const title = document.createElement('strong');
+      title.textContent = project.name;
+      const updated = document.createElement('span');
+      updated.textContent = `Cloud save · ${new Date(project.updatedAt).toLocaleString()}`;
+      details.append(title, updated);
+      const actions = document.createElement('div');
+      actions.className = 'project-card-actions';
+      const openButton = document.createElement('button');
+      openButton.textContent = 'Download & Open';
+      openButton.addEventListener('click', async () => {
+        try {
+          const latest = await loadRemoteProject(token, project.id);
+          await saveProject(latest);
+          currentProject = latest;
+          await loadWorld(latest.world);
+          currentProjectName.textContent = latest.name;
+          projectManager.classList.remove('visible');
+          document.querySelector('#editor-screen')?.classList.remove('hidden');
+          saveStatus.textContent = 'LOADED FROM GITHUB';
+        } catch (error) {
+          alert(error instanceof Error ? error.message : 'Could not load this GitHub project.');
+        }
+      });
+      actions.append(openButton);
+      card.append(details, actions);
+      githubProjectList.appendChild(card);
+    }
+  } catch (error) {
+    githubProjectList.innerHTML = '<p class="muted">Could not load cloud projects.</p>';
+    setGitHubStatus(error instanceof Error ? error.message : 'GitHub connection failed.');
+  }
+}
+document.querySelector<HTMLButtonElement>('#github-connect-button')!.addEventListener('click', async () => {
+  const token = githubTokenInput.value.trim();
+  if (!token) { setGitHubStatus('Paste your token first.'); return; }
+  const button = document.querySelector<HTMLButtonElement>('#github-connect-button')!;
+  button.disabled = true;
+  setGitHubStatus('Connecting…');
+  try {
+    await connectGitHub(token);
+    sessionStorage.setItem(githubTokenKey, token);
+    githubTokenInput.value = '';
+    setGitHubStatus('Connected to private repository', true);
+    await refreshGitHubProjects();
+  } catch (error) {
+    setGitHubStatus(error instanceof Error ? error.message : 'Could not connect.');
+  } finally { button.disabled = false; }
+});
+document.querySelector<HTMLButtonElement>('#github-disconnect-button')!.addEventListener('click', () => {
+  sessionStorage.removeItem(githubTokenKey);
+  githubTokenInput.value = '';
+  setGitHubStatus('Disconnected');
+  githubProjectList.innerHTML = '<p class="muted">Connect to view projects in GitHub.</p>';
+});
+document.querySelector<HTMLButtonElement>('#github-refresh-button')!.addEventListener('click', () => void refreshGitHubProjects());
+const existingGitHubToken = getGitHubToken();
+if (existingGitHubToken) {
+  void connectGitHub(existingGitHubToken).then(() => {
+    setGitHubStatus('Connected to private repository', true);
+    return refreshGitHubProjects();
+  }).catch(() => {
+    sessionStorage.removeItem(githubTokenKey);
+    setGitHubStatus('Token rejected or access revoked. Reconnect to continue.');
+  });
+}
+
 async function refreshProjectList() {
   const projects = await listProjects();
   projectListElement.innerHTML = '';
@@ -1595,6 +1694,26 @@ document.querySelector<HTMLButtonElement>('#save-button')!
 
 
 
+
+
+document.querySelector<HTMLButtonElement>('#save-github-button')!.addEventListener('click', async () => {
+  const token = getGitHubToken();
+  if (!token) { alert('Connect GitHub from the Projects dashboard first.'); return; }
+  if (!currentProject) { alert('Open or create a project before saving it to GitHub.'); return; }
+  const button = document.querySelector<HTMLButtonElement>('#save-github-button')!;
+  button.disabled = true;
+  saveStatus.textContent = 'SAVING TO GITHUB…';
+  try {
+    currentProject.world = await serializeWorld();
+    currentProject.updatedAt = Date.now();
+    await saveProject(currentProject);
+    await saveRemoteProject(token, currentProject);
+    saveStatus.textContent = 'SAVED LOCALLY + GITHUB';
+  } catch (error) {
+    saveStatus.textContent = 'GITHUB SAVE FAILED';
+    alert(error instanceof Error ? error.message : 'Could not save this project to GitHub.');
+  } finally { button.disabled = false; }
+});
 
 const clock = new THREE.Clock();
 
