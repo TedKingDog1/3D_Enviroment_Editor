@@ -28,6 +28,20 @@
             <button id="create-project-button">＋ New Project</button>
           </div>
         </div>
+        <section class="github-card">
+          <div class="github-card-heading">
+            <div><strong>GITHUB CLOUD BACKUP</strong><span>Sync environments with your private repository.</span></div>
+            <span id="github-status" class="github-status">Not connected</span>
+          </div>
+          <div class="github-connect-row">
+            <input id="github-token" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your fine-grained GitHub token">
+            <button id="github-connect-button" class="primary-button">Connect</button>
+            <button id="github-disconnect-button" class="secondary-button">Disconnect</button>
+          </div>
+          <p class="muted github-security-note">Token stays in this browser tab's session storage. Disconnect clears it here; revoke it separately in GitHub to invalidate it.</p>
+          <div class="github-remote-heading"><strong>Cloud Projects</strong><button id="github-refresh-button" class="secondary-button">Refresh</button></div>
+          <div id="github-project-list" class="project-list github-project-list"><p class="muted">Connect to view projects in GitHub.</p></div>
+        </section>
         <div class="dashboard-section-heading">
           <h2>Your Projects</h2>
           <span>Stored locally in this browser</span>
@@ -92,6 +106,7 @@
           <button id="world-settings-button">World Settings</button>
           <button id="delete-button">Delete Selected</button>
           <button id="save-button">Save Project</button>
+          <button id="save-github-button">Save to GitHub</button>
         </div>
       </header>
 
