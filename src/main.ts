@@ -1123,8 +1123,11 @@ function getAssetPaintHit(event: PointerEvent): THREE.Intersection<THREE.Object3
   return assetPaintRaycaster.intersectObjects(getAssetPaintSurfaces(), false)[0] ?? null;
 }
 
-function assetWouldOverlap(position: THREE.Vector3, scale: number) {
-  const minimumSpacing = 0.72 * scale;
+function assetWouldOverlap(position: THREE.Vector3, scale: number, type: NatureAssetType) {
+  const baseSpacing: Record<NatureAssetType, number> = {
+    oakTree: 2.2, pineTree: 1.65, boulder: 1.15, bush: 0.95, grassClump: 0.38
+  };
+  const minimumSpacing = baseSpacing[type] * scale;
   return entities.some(entity => {
     if (!entity.primitiveType || !['oakTree','pineTree','boulder','bush','grassClump'].includes(entity.primitiveType)) return false;
     const other = entity.object.position;
@@ -1141,7 +1144,7 @@ function placePaintedAsset(type: NatureAssetType, surfacePoint: THREE.Vector3) {
   mesh.rotation.y = Math.random() * Math.PI * 2;
   const bounds = new THREE.Box3().setFromObject(mesh);
   mesh.position.set(surfacePoint.x, surfacePoint.y - bounds.min.y, surfacePoint.z);
-  if (assetWouldOverlap(mesh.position, scale)) {
+  if (assetWouldOverlap(mesh.position, scale, type)) {
     mesh.geometry.dispose();
     (mesh.material as THREE.Material).dispose();
     return false;
