@@ -1479,7 +1479,8 @@ async function serializeWorld(): Promise<WorldDocument> {
       kind: entity.kind,
       position: object.position.toArray() as [number, number, number],
       rotation: [object.rotation.x, object.rotation.y, object.rotation.z],
-      scale: object.scale.toArray() as [number, number, number]
+      scale: object.scale.toArray() as [number, number, number],
+      folderId: entity.folderId
     };
 
     if (entity.kind === 'mesh') {
