@@ -1325,7 +1325,7 @@ document.addEventListener('keyup', event => keys.delete(event.code));
 window.addEventListener('blur', () => keys.clear());
 
 renderer.domElement.addEventListener('click', event => {
-  if (terrainSculptActive || isPointerLocked || isDraggingTransform) return;
+  if (terrainSculptActive || assetPaintActive || isPointerLocked || isDraggingTransform) return;
 
   const bounds = renderer.domElement.getBoundingClientRect();
   pointer.x = ((event.clientX - bounds.left) / bounds.width) * 2 - 1;
