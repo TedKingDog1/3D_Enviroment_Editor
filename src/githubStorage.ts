@@ -18,6 +18,20 @@ async function request<T>(token: string, path: string, init: RequestInit = {}): 
   if (!response.ok) throw new Error(typeof payload.message === 'string' ? payload.message : `GitHub HTTP ${response.status}`);
   return payload as T;
 }
+async function requestRawText(token: string, path: string): Promise<string> {
+  const response = await fetch(API_ROOT + path, {
+    headers: {
+      Accept: 'application/vnd.github.raw+json',
+      Authorization: `Bearer ${token}`,
+      'X-GitHub-Api-Version': '2022-11-28'
+    }
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(typeof payload.message === 'string' ? payload.message : `GitHub HTTP ${response.status}`);
+  }
+  return response.text();
+}
 function encodeBase64(text: string): string {
   const bytes = new TextEncoder().encode(text);
   let binary = '';
@@ -43,14 +57,14 @@ export async function listRemoteProjects(token: string): Promise<StoredProject[]
   }
   const files = items.filter(item => item.type === 'file' && item.name.endsWith('.json'));
   const projects = await Promise.all(files.map(async item => {
-    const file = await request<{ content: string }>(token, item.url.replace(API_ROOT, ''));
-    return JSON.parse(decodeBase64(file.content)) as StoredProject;
+    const raw = await requestRawText(token, item.url.replace(API_ROOT, ''));
+    return JSON.parse(raw) as StoredProject;
   }));
   return projects.sort((a, b) => b.updatedAt - a.updatedAt);
 }
 export async function loadRemoteProject(token: string, id: string): Promise<StoredProject> {
-  const file = await request<{ content: string }>(token, `/repos/${OWNER}/${REPOSITORY}/contents/${pathFor(id)}?ref=${BRANCH}`);
-  return JSON.parse(decodeBase64(file.content)) as StoredProject;
+  const raw = await requestRawText(token, `/repos/${OWNER}/${REPOSITORY}/contents/${pathFor(id)}?ref=${BRANCH}`);
+  return JSON.parse(raw) as StoredProject;
 }
 export async function saveRemoteProject(token: string, project: StoredProject): Promise<void> {
   const path = pathFor(project.id);
