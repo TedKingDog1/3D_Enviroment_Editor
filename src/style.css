@@ -660,3 +660,20 @@ html[data-theme="system"] :focus-visible {
 .terrain-paint-controls select{padding:6px 8px;border:1px solid var(--panel-border);border-radius:5px;background:var(--ui-bg);color:var(--ui-text);font-size:11px}
 .terrain-paint-controls .terrain-slider input{width:82px}
 @media(max-width:900px){.terrain-paint-controls{width:100%}.terrain-tool-tabs{border-right:0}}
+
+/* GitHub project connection */
+.github-card{margin:24px 0;padding:20px;border:1px solid var(--panel-border);border-radius:12px;background:var(--panel-bg);display:grid;gap:14px}
+.github-card-heading,.github-remote-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.github-card-heading>div{display:grid;gap:5px}
+.github-card-heading strong{font-size:11px;letter-spacing:1px;color:var(--accent)}
+.github-card-heading span,.github-security-note{font-size:11px;color:var(--muted-text)}
+.github-status{padding:5px 9px;border:1px solid var(--panel-border);border-radius:20px;white-space:nowrap}
+.github-status.connected{color:#3a9b69;border-color:#3a9b69}
+.github-connect-row{display:flex;gap:8px;flex-wrap:wrap}
+.github-connect-row input{flex:1;min-width:220px;padding:10px 12px;border:1px solid var(--panel-border);border-radius:6px;background:var(--ui-bg);color:var(--ui-text)}
+.github-security-note{margin:0;line-height:1.5}
+.github-remote-heading{padding-top:8px;border-top:1px solid var(--panel-border)}
+.github-remote-heading strong{font-size:12px}
+.github-project-list{min-height:32px}
+.github-project-list .project-card{background:var(--ui-bg)}
+@media(max-width:700px){.github-card{padding:14px}.github-card-heading{align-items:flex-start;flex-direction:column}.github-connect-row{flex-direction:column}.github-connect-row input{min-width:0;width:100%}}
