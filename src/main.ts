@@ -410,7 +410,6 @@ function registerEntity(object: THREE.Object3D, kind: EntityKind, helper?: THREE
   if (helper) scene.add(helper);
 
   if (selectAfter) selectEntity(entity);
-  refreshOutliner();
 }
 
 function addObject(type: string) {
