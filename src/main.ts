@@ -8,6 +8,7 @@ import {
   saveProject,
   type EntityKind,
   type ProjectObject,
+  type ProjectFolder,
   type StoredProject,
   type WorldDocument
 } from './projectStorage';
@@ -22,6 +23,7 @@ interface Entity {
   primitiveType?: 'box' | 'sphere' | 'cylinder' | 'plane' | 'terrain' | NatureAssetType;
   helper?: THREE.Object3D;
   name: string;
+  folderId?: string;
   shadowLayer?: number;
   shadowExcludedLights?: Set<Entity>;
   lightTransmissionEnabled?: boolean;
@@ -165,6 +167,13 @@ scene.add(transform.getHelper());
 
 const entities: Entity[] = [];
 let selected: Entity | null = null;
+let selectedEntities = new Set<Entity>();
+let folders: ProjectFolder[] = [];
+const collapsedFolders = new Set<string>();
+let selectionAnchor: Entity | null = null;
+let selectionTransformGroup: THREE.Group | null = null;
+const folderList = document.createElement('div');
+folderList.className = 'outliner-folders';
 let terrainSculptActive = false;
 let isSculptingTerrain = false;
 let sculptMode: SculptMode = 'raise';
@@ -528,85 +537,92 @@ function addNatureAsset(type: NatureAssetType) {
   entities[entities.length - 1].primitiveType = type;
 }
 
-function selectEntity(entity: Entity | null) {
-  if (terrainSculptActive && !(entity?.kind === 'mesh' && entity.primitiveType === 'terrain')) {
-    setTerrainSculptMode(false);
-  }
-  selected = entity;
+function clearSelectionTransform() {
   transform.detach();
-
-  if (entity) {
-    transform.attach(entity.object);
-    selectionStatus.textContent = `SELECTED: ${entity.name.toUpperCase()}`;
-  } else {
-    selectionStatus.textContent = 'NO OBJECT SELECTED';
+  if (selectionTransformGroup) {
+    for (const child of [...selectionTransformGroup.children]) scene.attach(child);
+    scene.remove(selectionTransformGroup);
+    selectionTransformGroup = null;
   }
+}
 
+function attachSelectionTransform() {
+  clearSelectionTransform();
+  if (!selectedEntities.size) return;
+  if (selectedEntities.size === 1) {
+    transform.attach([...selectedEntities][0].object);
+    return;
+  }
+  const group = new THREE.Group();
+  group.name = 'Multi-selection Pivot';
+  const center = new THREE.Vector3();
+  for (const entity of selectedEntities) center.add(entity.object.getWorldPosition(new THREE.Vector3()));
+  center.divideScalar(selectedEntities.size);
+  group.position.copy(center);
+  scene.add(group);
+  for (const entity of selectedEntities) group.attach(entity.object);
+  selectionTransformGroup = group;
+  transform.attach(group);
+}
+
+function applySelection(next: Entity[], anchor: Entity | null = next[next.length - 1] ?? null) {
+  clearSelectionTransform();
+  selectedEntities = new Set(next);
+  selected = anchor && selectedEntities.has(anchor) ? anchor : (next[next.length - 1] ?? null);
+  selectionAnchor = anchor;
+  attachSelectionTransform();
+  selectionStatus.textContent = selectedEntities.size
+    ? selectedEntities.size === 1 ? `SELECTED: ${selected!.name.toUpperCase()}` : `SELECTED: ${selectedEntities.size} OBJECTS`
+    : 'NO OBJECT SELECTED';
   refreshOutliner();
   refreshProperties();
+}
+
+function selectEntity(entity: Entity | null, additive = false, range = false) {
+  if (terrainSculptActive && !(entity?.kind === 'mesh' && entity.primitiveType === 'terrain')) setTerrainSculptMode(false);
+  if (!entity) { applySelection([]); return; }
+  if (range && selectionAnchor) {
+    const visible = entities.filter(item => !item.folderId || !collapsedFolders.has(item.folderId));
+    const a = visible.indexOf(selectionAnchor), b = visible.indexOf(entity);
+    if (a >= 0 && b >= 0) applySelection(visible.slice(Math.min(a,b), Math.max(a,b)+1), entity);
+    else applySelection([entity], entity);
+  } else if (additive) {
+    const next = new Set(selectedEntities);
+    if (next.has(entity)) next.delete(entity); else next.add(entity);
+    applySelection([...next], entity);
+  } else applySelection([entity], entity);
 }
 
 function deleteSelected() {
-  if (!selected) return;
-
-  const target = selected;
-
-  // Detach the transform gizmo before removing the entity.
-  transform.detach();
-
-  // Remove the entity from the scene and entity registry.
-  scene.remove(target.object);
-
-  const index = entities.indexOf(target);
-  if (index !== -1) entities.splice(index, 1);
-
-  if (target.shadowLayer !== undefined) {
-    for (const entity of entities) {
-      if (entity.kind === 'mesh') {
-        entity.shadowExcludedLights?.delete(target);
-        applyMeshShadowLayers(entity);
-      }
+  const targets = [...selectedEntities];
+  if (!targets.length && selected) targets.push(selected);
+  if (!targets.length) return;
+  clearSelectionTransform();
+  for (const target of targets) {
+    scene.remove(target.object);
+    const index = entities.indexOf(target);
+    if (index !== -1) entities.splice(index, 1);
+    if (target.shadowLayer !== undefined) {
+      for (const entity of entities) if (entity.kind === 'mesh') { entity.shadowExcludedLights?.delete(target); applyMeshShadowLayers(entity); }
     }
-  }
-
-  // Dispose mesh resources when the entity is a mesh.
-  if (target.object instanceof THREE.Mesh) {
-    target.object.geometry.dispose();
-
-    const material = target.object.material;
-    if (Array.isArray(material)) {
-      material.forEach(item => item.dispose());
-    } else {
-      material.dispose();
+    if (target.object instanceof THREE.Mesh) {
+      target.object.geometry.dispose();
+      const material = target.object.material;
+      (Array.isArray(material) ? material : [material]).forEach(item => item.dispose());
     }
+    if (target.helper) {
+      scene.remove(target.helper);
+      target.helper.traverse(child => {
+        const visual = child as THREE.Mesh;
+        visual.geometry?.dispose();
+        const material = visual.material;
+        if (material) (Array.isArray(material) ? material : [material]).forEach(item => item.dispose());
+      });
+    }
+    if (target.kind === 'spotLight') scene.remove((target.object as THREE.SpotLight).target);
   }
-
-  // Remove and dispose camera/light helper resources.
-  if (target.helper) {
-    scene.remove(target.helper);
-
-    target.helper.traverse(child => {
-      const visual = child as THREE.Mesh;
-      if (visual.geometry) visual.geometry.dispose();
-
-      const material = (child as THREE.Mesh).material;
-      if (material) {
-        if (Array.isArray(material)) {
-          material.forEach(item => item.dispose());
-        } else {
-          material.dispose();
-        }
-      }
-    });
-  }
-
-  selected = null;
-  selectionStatus.textContent = 'NO OBJECT SELECTED';
-
-  refreshOutliner();
-  refreshProperties();
+  applySelection([]);
 }
-
 document.querySelector<HTMLButtonElement>('#delete-button')!
   .addEventListener('click', deleteSelected);
 
@@ -652,19 +668,101 @@ document.addEventListener('keydown', event => {
 
 function refreshOutliner() {
   objectList.innerHTML = '';
+  const folderBar = document.createElement('div');
+  folderBar.className = 'outliner-folder-actions';
+  const addFolder = document.createElement('button');
+  addFolder.textContent = '+ Folder';
+  addFolder.addEventListener('click', createFolder);
+  const renameFolder = document.createElement('button');
+  renameFolder.textContent = 'Rename';
+  renameFolder.addEventListener('click', renameSelectedFolder);
+  const deleteFolder = document.createElement('button');
+  deleteFolder.textContent = 'Delete';
+  deleteFolder.addEventListener('click', deleteSelectedFolder);
+  folderBar.append(addFolder, renameFolder, deleteFolder);
+  objectList.appendChild(folderBar);
 
-  for (const entity of entities) {
-    const entry = document.createElement('button');
-    entry.className = `object-entry${entity === selected ? ' selected' : ''}`;
-
-    const icon = entity.kind === 'mesh' ? '◇'
-      : entity.kind === 'camera' ? '▣'
-      : '☼';
-
-    entry.textContent = `${icon}  ${entity.name}`;
-    entry.addEventListener('click', () => selectEntity(entity));
-    objectList.appendChild(entry);
+  const renderFolder = (folder: ProjectFolder, depth: number) => {
+    const row = document.createElement('div');
+    row.className = 'outliner-folder-row';
+    row.style.paddingLeft = `${8 + depth * 14}px`;
+    const toggle = document.createElement('button');
+    toggle.className = 'outliner-folder-toggle';
+    toggle.textContent = collapsedFolders.has(folder.id) ? '▸' : '▾';
+    toggle.addEventListener('click', () => { collapsedFolders.has(folder.id) ? collapsedFolders.delete(folder.id) : collapsedFolders.add(folder.id); refreshOutliner(); });
+    const label = document.createElement('button');
+    label.className = 'outliner-folder-label';
+    label.textContent = `📁  ${folder.name}`;
+    label.addEventListener('click', () => { selectedFolderId = folder.id; refreshOutliner(); });
+    label.classList.toggle('active', selectedFolderId === folder.id);
+    row.addEventListener('dragover', event => event.preventDefault());
+    row.addEventListener('drop', event => {
+      event.preventDefault();
+      const id = (event as DragEvent).dataTransfer?.getData('application/x-ces-entity');
+      const moving = entities.find(item => item.id === id);
+      if (moving) { moving.folderId = folder.id; refreshOutliner(); }
+    });
+    row.append(toggle, label);
+    objectList.appendChild(row);
+    if (!collapsedFolders.has(folder.id)) {
+      entities.filter(entity => entity.folderId === folder.id).forEach(entity => renderEntityRow(entity, depth + 1));
+      folders.filter(child => child.parentId === folder.id).forEach(child => renderFolder(child, depth + 1));
+    }
+  };
+  folders.filter(folder => !folder.parentId).forEach(folder => renderFolder(folder, 0));
+  entities.filter(entity => !entity.folderId).forEach(entity => renderEntityRow(entity, 0));
+}
+function renderEntityRow(entity: Entity, depth: number) {
+  const entry = document.createElement('button');
+  entry.className = `object-entry${selectedEntities.has(entity) ? ' selected' : ''}`;
+  entry.style.paddingLeft = `${10 + depth * 14}px`;
+  const icon = entity.kind === 'mesh' ? '◇' : entity.kind === 'camera' ? '▣' : '☼';
+  entry.textContent = `${icon}  ${entity.name}`;
+  entry.addEventListener('click', event => selectEntity(entity, (event as MouseEvent).ctrlKey || (event as MouseEvent).metaKey, (event as MouseEvent).shiftKey));
+  entry.draggable = true;
+  entry.addEventListener('dragstart', event => { event.dataTransfer?.setData('application/x-ces-entity', entity.id); });
+  entry.addEventListener('dragover', event => { if ((event as DragEvent).dataTransfer?.types.includes('application/x-ces-entity')) event.preventDefault(); });
+  entry.addEventListener('drop', event => {
+    event.preventDefault();
+    const id = (event as DragEvent).dataTransfer?.getData('application/x-ces-entity');
+    const moving = entities.find(item => item.id === id);
+    if (moving) { moving.folderId = entity.folderId; refreshOutliner(); }
+  });
+  objectList.appendChild(entry);
+}
+let selectedFolderId: string | null = null;
+function createFolder() {
+  const name = prompt('Folder name:', `New Folder ${folders.length + 1}`);
+  if (!name?.trim()) return;
+  const folder: ProjectFolder = { id: crypto.randomUUID(), name: name.trim(), parentId: selectedFolderId ?? undefined };
+  folders.push(folder);
+  selectedFolderId = folder.id;
+  refreshOutliner();
+}
+function renameSelectedFolder() {
+  const folder = folders.find(item => item.id === selectedFolderId);
+  if (!folder) { alert('Select a folder first.'); return; }
+  const name = prompt('Rename folder:', folder.name);
+  if (name?.trim()) { folder.name = name.trim(); refreshOutliner(); }
+}
+function deleteSelectedFolder() {
+  const folder = folders.find(item => item.id === selectedFolderId);
+  if (!folder) { alert('Select a folder first.'); return; }
+  const deleteContents = confirm(`Delete folder "${folder.name}" and all its contents? Choose Cancel to move its contents out instead.`);
+  const descendants = new Set<string>([folder.id]);
+  let changed = true;
+  while (changed) { changed = false; for (const item of folders) if (item.parentId && descendants.has(item.parentId) && !descendants.has(item.id)) { descendants.add(item.id); changed = true; } }
+  if (deleteContents) {
+    const doomed = entities.filter(entity => entity.folderId && descendants.has(entity.folderId));
+    applySelection(doomed);
+    deleteSelected();
+  } else {
+    for (const entity of entities) if (entity.folderId && descendants.has(entity.folderId)) entity.folderId = folder.parentId;
+    for (const item of folders) if (item.parentId && descendants.has(item.parentId)) item.parentId = folder.parentId;
   }
+  folders = folders.filter(item => !descendants.has(item.id));
+  selectedFolderId = null;
+  refreshOutliner();
 }
 
 function vectorFields(label: string, property: 'position' | 'rotation' | 'scale', object: THREE.Object3D) {
@@ -1085,6 +1183,7 @@ let assetPaintActive = false;
 let assetBrushRadius = 8;
 let assetBrushDensity = 5;
 let assetPaintType: NatureAssetType = 'oakTree';
+let activePaintFolderId: string | null = null;
 let lastAssetStrokePoint: THREE.Vector3 | null = null;
 const assetPaintRaycaster = new THREE.Raycaster();
 const assetPaintPointer = new THREE.Vector2();
@@ -1100,6 +1199,7 @@ scene.add(assetBrushCursor);
 function setAssetPaintMode(active: boolean) {
   assetPaintActive = active;
   lastAssetStrokePoint = null;
+  if (active) { const name = NATURE_ASSETS.find(asset => asset.type === assetPaintType)?.name ?? 'Assets'; const folder: ProjectFolder = { id: crypto.randomUUID(), name: `${name} Painted ${folders.filter(item => item.name.startsWith(name + ' Painted')).length + 1}` }; folders.push(folder); activePaintFolderId = folder.id; refreshOutliner(); } else activePaintFolderId = null;
   assetBrushCursor.visible = false;
   transform.enabled = !active && !terrainSculptActive;
   document.querySelector('#asset-paint-toolbar')?.classList.toggle('hidden', !active);
@@ -1151,6 +1251,7 @@ function placePaintedAsset(type: NatureAssetType, surfacePoint: THREE.Vector3) {
   }
   registerEntity(mesh, 'mesh', undefined, false);
   entities[entities.length - 1].primitiveType = type;
+  entities[entities.length - 1].folderId = activePaintFolderId ?? undefined;
   return true;
 }
 
@@ -1337,7 +1438,7 @@ renderer.domElement.addEventListener('click', event => {
   const meshes = entities.filter(e => e.kind === 'mesh').map(e => e.object);
   const hits = raycaster.intersectObjects(meshes, false);
   const entity = hits.length ? entities.find(e => e.object === hits[0].object) ?? null : null;
-  selectEntity(entity);
+  selectEntity(entity, event.ctrlKey || event.metaKey, event.shiftKey);
 });
 
 async function textureToDataUrl(texture: THREE.Texture): Promise<string | undefined> {
@@ -1456,6 +1557,7 @@ async function serializeWorld(): Promise<WorldDocument> {
       }
     },
     objects,
+    folders: folders.map(folder => ({ ...folder })),
     editorCamera: {
       position: editorCamera.position.toArray() as [number, number, number],
       rotation: [editorCamera.rotation.x, editorCamera.rotation.y, editorCamera.rotation.z]
@@ -1489,10 +1591,15 @@ function disposeEntity(entity: Entity) {
 }
 
 async function loadWorld(world: WorldDocument) {
+  clearSelectionTransform();
   transform.detach();
   for (const entity of [...entities]) disposeEntity(entity);
   entities.length = 0;
   selected = null;
+  selectedEntities.clear();
+  folders = (world.folders ?? []).map(folder => ({ ...folder }));
+  collapsedFolders.clear();
+  selectedFolderId = null;
   previewCamera = null;
   objectNumber = 0;
 
@@ -1600,6 +1707,7 @@ async function loadWorld(world: WorldDocument) {
     registerEntity(object, data.kind, helper);
     const entity = entities[entities.length - 1];
     entity.id = data.id;
+    entity.folderId = data.folderId;
     if (data.kind === 'mesh') {
       entity.primitiveType = data.geometry?.type === 'custom' ? 'box' : (data.geometry?.type ?? 'box') as Entity['primitiveType'];
       entity.lightTransmissionEnabled = Boolean(data.lightTransmissionEnabled);
