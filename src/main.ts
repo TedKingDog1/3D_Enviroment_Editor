@@ -1075,8 +1075,10 @@ function refreshProperties() {
       } else if (entity.editableMesh && entity.object instanceof THREE.Mesh) {
         componentMode = mode as ComponentMode;
         if (componentEditor) componentEditor.setMode(componentMode);
-        else componentEditor = new MeshComponentEditor(entity.object, entity.editableMesh);
-        componentEditor.mode = componentMode;
+        else {
+          componentEditor = new MeshComponentEditor(entity.object, entity.editableMesh);
+          componentEditor.setMode(componentMode);
+        }
       }
       refreshProperties();
     });
@@ -1688,6 +1690,9 @@ function disposeEntity(entity: Entity) {
 }
 
 async function loadWorld(world: WorldDocument) {
+  componentEditor?.clear();
+  componentEditor = null;
+  componentMode = null;
   clearSelectionTransform();
   transform.detach();
   for (const entity of [...entities]) disposeEntity(entity);
