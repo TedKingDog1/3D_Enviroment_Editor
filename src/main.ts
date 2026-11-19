@@ -1786,6 +1786,7 @@ renderer.domElement.addEventListener('pointerdown', event => {
   const hit = getAssetPaintHit(event);
   if (!hit) return;
   event.preventDefault();
+  editorHistory.beginGroup('Paint assets');
   lastAssetStrokePoint = hit.point.clone();
   paintAssetStamp(hit.point);
   renderer.domElement.setPointerCapture(event.pointerId);
@@ -1806,7 +1807,11 @@ renderer.domElement.addEventListener('pointermove', event => {
     lastAssetStrokePoint = hit.point.clone();
   }
 });
-const stopAssetPaintStroke = () => { lastAssetStrokePoint = null; };
+const stopAssetPaintStroke = () => {
+  lastAssetStrokePoint = null;
+  editorHistory.endGroup();
+  refreshHistoryButtons();
+};
 renderer.domElement.addEventListener('pointerup', stopAssetPaintStroke);
 renderer.domElement.addEventListener('pointercancel', stopAssetPaintStroke);
 window.addEventListener('pointerup', stopAssetPaintStroke);
