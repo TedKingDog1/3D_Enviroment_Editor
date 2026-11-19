@@ -11,8 +11,12 @@ export class MeshComponentEditor {
   private vertexPoints: THREE.Points | null = null;
   private edgeLines: THREE.LineSegments | null = null;
   private faceMeshes: THREE.Mesh[] = [];
+  private readonly mesh: THREE.Mesh;
+  private readonly data: EditableMeshData;
 
-  constructor(private readonly mesh: THREE.Mesh, private readonly data: EditableMeshData) {
+  constructor(mesh: THREE.Mesh, data: EditableMeshData) {
+    this.mesh = mesh;
+    this.data = data;
     this.group.name = 'Mesh Component Overlay';
     this.mesh.add(this.group);
     this.rebuild();
@@ -71,7 +75,6 @@ export class MeshComponentEditor {
       const positions = this.data.vertices.flatMap(vertex => vertex.position);
       const geometry = new THREE.BufferGeometry();
       geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-      const colors = new Float32Array(this.data.vertices.length * 3);
       this.vertexPoints = new THREE.Points(geometry, new THREE.PointsMaterial({
         size: 12, sizeAttenuation: false, vertexColors: true, depthTest: false
       }));
@@ -89,7 +92,6 @@ export class MeshComponentEditor {
       }
       const geometry = new THREE.BufferGeometry();
       geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-      const colors = new Float32Array(this.data.edges.length * 6);
       this.edgeLines = new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({
         vertexColors: true, depthTest: false, transparent: true, opacity: 1
       }));
