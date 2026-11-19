@@ -111,7 +111,7 @@ export function createBoxEditableMesh(width = 1.8, height = 1.8, depth = 1.8): E
     id: makeId('f'),
     vertices: corners.map(corner => vertices[corner].id),
     uvs: [[0, 0], [1, 0], [1, 1], [0, 1]] as Vec2Tuple[],
-    materialIndex: index
+    materialIndex: 0
   }));
   const mesh: EditableMeshData = { version: 1, vertices, edges: [], faces };
   mesh.edges = rebuildEditableEdges(mesh);
