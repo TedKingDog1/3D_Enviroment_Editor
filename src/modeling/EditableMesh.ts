@@ -22,6 +22,8 @@ export interface EditableFace {
   vertices: VertexId[];
   /** One UV coordinate per face corner, in the same order as vertices. */
   uvs?: Vec2Tuple[];
+  /** Optional linear RGB color per face corner, used by vertex-colored assets. */
+  colors?: Vec3Tuple[];
   materialIndex?: number;
 }
 
@@ -77,6 +79,8 @@ export function validateEditableMesh(mesh: EditableMeshData): string[] {
     if (face.vertices.some(id => !vertexIds.has(id))) errors.push(`Face ${face.id} references a missing vertex.`);
     if (face.uvs && face.uvs.length !== face.vertices.length) errors.push(`Face ${face.id} has an invalid UV corner count.`);
     if (face.uvs?.some(uv => !uv.every(Number.isFinite))) errors.push(`Face ${face.id} has a non-finite UV.`);
+    if (face.colors && face.colors.length !== face.vertices.length) errors.push(`Face ${face.id} has an invalid color corner count.`);
+    if (face.colors?.some(color => !color.every(Number.isFinite))) errors.push(`Face ${face.id} has a non-finite vertex color.`);
   }
   for (const edge of mesh.edges) {
     if (edge.vertices[0] === edge.vertices[1]) errors.push(`Edge ${edge.id} has identical endpoints.`);
@@ -123,6 +127,7 @@ export function editableMeshFromBufferGeometry(geometry: THREE.BufferGeometry, t
   const position = geometry.getAttribute('position');
   if (!position) throw new Error('Cannot convert geometry without a position attribute.');
   const uv = geometry.getAttribute('uv');
+  const color = geometry.getAttribute('color');
   const index = geometry.getIndex();
   const vertexMap = new Map<string, EditableVertex>();
   const vertices: EditableVertex[] = [];
@@ -153,6 +158,7 @@ export function editableMeshFromBufferGeometry(geometry: THREE.BufferGeometry, t
       id: makeId('f'),
       vertices: ids,
       uvs: uv ? sourceIndices.map(sourceIndex => [uv.getX(sourceIndex), uv.getY(sourceIndex)] as Vec2Tuple) : undefined,
+      colors: color ? sourceIndices.map(sourceIndex => [color.getX(sourceIndex), color.getY(sourceIndex), color.getZ(sourceIndex)] as Vec3Tuple) : undefined,
       materialIndex: geometry.groups.find(group => i >= group.start && i < group.start + group.count)?.materialIndex ?? 0
     });
   }
@@ -170,6 +176,8 @@ export function editableMeshToBufferGeometry(mesh: EditableMeshData): THREE.Buff
   const vertexById = new Map(mesh.vertices.map(vertex => [vertex.id, vertex]));
   const positions: number[] = [];
   const uvs: number[] = [];
+  const colors: number[] = [];
+  let hasColors = false;
   const groups: { start: number; count: number; materialIndex: number }[] = [];
   for (const face of mesh.faces) {
     const start = positions.length / 3;
@@ -181,6 +189,9 @@ export function editableMeshToBufferGeometry(mesh: EditableMeshData): THREE.Buff
         positions.push(...corner.position);
         const faceUv = face.uvs?.[cornerIndex] ?? [0, 0];
         uvs.push(faceUv[0], faceUv[1]);
+        const faceColor = face.colors?.[cornerIndex] ?? [1, 1, 1];
+        if (face.colors) hasColors = true;
+        colors.push(faceColor[0], faceColor[1], faceColor[2]);
       }
     }
     const count = positions.length / 3 - start;
@@ -193,6 +204,7 @@ export function editableMeshToBufferGeometry(mesh: EditableMeshData): THREE.Buff
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  if (hasColors) geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   groups.forEach(group => geometry.addGroup(group.start, group.count, group.materialIndex));
   geometry.computeVertexNormals();
   geometry.computeBoundingBox();
