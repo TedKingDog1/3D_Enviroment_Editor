@@ -21,8 +21,8 @@ export class EditorHistory {
 
   get canUndo(): boolean { return this.undoStack.length > 0; }
   get canRedo(): boolean { return this.redoStack.length > 0; }
-  get undoLabel(): string | null { return this.undoStack.at(-1)?.label ?? null; }
-  get redoLabel(): string | null { return this.redoStack.at(-1)?.label ?? null; }
+  get undoLabel(): string | null { return this.undoStack[this.undoStack.length - 1]?.label ?? null; }
+  get redoLabel(): string | null { return this.redoStack[this.redoStack.length - 1]?.label ?? null; }
 
   record(command: HistoryCommand): void {
     this.undoStack.push(command);
@@ -32,18 +32,20 @@ export class EditorHistory {
   }
 
   undo(): boolean {
-    const command = this.undoStack.pop();
+    const command = this.undoStack[this.undoStack.length - 1];
     if (!command) return false;
     command.undo();
+    this.undoStack.pop();
     this.redoStack.push(command);
     this.onChange?.();
     return true;
   }
 
   redo(): boolean {
-    const command = this.redoStack.pop();
+    const command = this.redoStack[this.redoStack.length - 1];
     if (!command) return false;
     command.redo();
+    this.redoStack.pop();
     this.undoStack.push(command);
     this.onChange?.();
     return true;
