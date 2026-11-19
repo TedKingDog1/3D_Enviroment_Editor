@@ -1039,23 +1039,57 @@ function renderEntityRow(entity: Entity, depth: number) {
   objectList.appendChild(entry);
 }
 let selectedFolderId: string | null = null;
+type OrganizationSnapshot = { folders: ProjectFolder[]; entityFolders: Array<{ id: string; folderId?: string }> };
+function captureOrganization(): OrganizationSnapshot {
+  return {
+    folders: structuredClone(folders),
+    entityFolders: entities.map(entity => ({ id: entity.id, folderId: entity.folderId }))
+  };
+}
+function restoreOrganization(snapshot: OrganizationSnapshot) {
+  folders = structuredClone(snapshot.folders);
+  for (const state of snapshot.entityFolders) {
+    const entity = entities.find(item => item.id === state.id);
+    if (entity) entity.folderId = state.folderId;
+  }
+  selectedFolderId = null;
+  refreshOutliner();
+}
+function recordOrganizationChange(label: string, before: OrganizationSnapshot) {
+  const after = captureOrganization();
+  if (JSON.stringify(before) === JSON.stringify(after)) return;
+  editorHistory.record({
+    label,
+    undo: () => restoreOrganization(before),
+    redo: () => restoreOrganization(after)
+  });
+  refreshHistoryButtons();
+}
 function createFolder() {
   const name = prompt('Folder name:', `New Folder ${folders.length + 1}`);
   if (!name?.trim()) return;
+  const before = captureOrganization();
   const folder: ProjectFolder = { id: crypto.randomUUID(), name: name.trim(), parentId: selectedFolderId ?? undefined };
   folders.push(folder);
   selectedFolderId = folder.id;
   refreshOutliner();
+  recordOrganizationChange('Create folder', before);
 }
 function renameSelectedFolder() {
   const folder = folders.find(item => item.id === selectedFolderId);
   if (!folder) { alert('Select a folder first.'); return; }
   const name = prompt('Rename folder:', folder.name);
-  if (name?.trim()) { folder.name = name.trim(); refreshOutliner(); }
+  if (name?.trim() && name.trim() !== folder.name) {
+    const before = captureOrganization();
+    folder.name = name.trim();
+    refreshOutliner();
+    recordOrganizationChange('Rename folder', before);
+  }
 }
 function deleteSelectedFolder() {
   const folder = folders.find(item => item.id === selectedFolderId);
   if (!folder) { alert('Select a folder first.'); return; }
+  const before = captureOrganization();
   const deleteContents = confirm(`Delete folder "${folder.name}" and all its contents? Choose Cancel to move its contents out instead.`);
   const descendants = new Set<string>([folder.id]);
   let changed = true;
@@ -1071,6 +1105,7 @@ function deleteSelectedFolder() {
   folders = folders.filter(item => !descendants.has(item.id));
   selectedFolderId = null;
   refreshOutliner();
+  recordOrganizationChange('Delete folder', before);
 }
 
 function vectorFields(label: string, property: 'position' | 'rotation' | 'scale', object: THREE.Object3D) {
