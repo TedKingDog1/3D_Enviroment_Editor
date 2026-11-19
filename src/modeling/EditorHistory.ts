@@ -11,8 +11,13 @@ export interface HistoryCommand {
 export class EditorHistory {
   private undoStack: HistoryCommand[] = [];
   private redoStack: HistoryCommand[] = [];
+  private readonly limit: number;
+  private readonly onChange?: () => void;
 
-  constructor(private readonly limit = 100, private readonly onChange?: () => void) {}
+  constructor(limit = 100, onChange?: () => void) {
+    this.limit = limit;
+    this.onChange = onChange;
+  }
 
   get canUndo(): boolean { return this.undoStack.length > 0; }
   get canRedo(): boolean { return this.redoStack.length > 0; }
