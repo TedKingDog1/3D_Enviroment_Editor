@@ -32,6 +32,7 @@ export interface WorldSettings {
 }
 
 export interface ProjectObject {
+  editableMesh?: import('./modeling/EditableMesh').EditableMeshData;
   id: string;
   name: string;
   kind: EntityKind;
