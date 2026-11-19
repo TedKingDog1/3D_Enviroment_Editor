@@ -1773,9 +1773,44 @@ function getTerrainHit(event: PointerEvent): THREE.Intersection<THREE.Object3D> 
   if(!selected||selected.kind!=='mesh'||selected.primitiveType!=='terrain')return null;
   const bounds=renderer.domElement.getBoundingClientRect(); brushPointer.x=((event.clientX-bounds.left)/bounds.width)*2-1; brushPointer.y=-((event.clientY-bounds.top)/bounds.height)*2+1; brushRaycaster.setFromCamera(brushPointer,editorCamera); return brushRaycaster.intersectObject(selected.object,false)[0]??null;
 }
-renderer.domElement.addEventListener('pointerdown',event=>{ if(!terrainSculptActive||event.button!==0||isPointerLocked)return; const hit=getTerrainHit(event); if(!hit||!selected)return; event.preventDefault(); isSculptingTerrain=true; flattenHeight=selected.object.worldToLocal(hit.point.clone()).z; if(terrainToolMode==='paint'&&hit.uv) paintTerrainAt(selected.object as THREE.Mesh,hit.uv); else if(terrainToolMode==='sculpt') sculptTerrain(selected.object as THREE.Mesh,hit.point,sculptMode,brushRadius,brushStrength,flattenHeight); renderer.domElement.setPointerCapture(event.pointerId); });
+type TerrainGeometrySnapshot = { entityId: string; positions: number[] };
+let terrainStrokeBefore: TerrainGeometrySnapshot | null = null;
+function captureTerrainGeometry(entity: Entity): TerrainGeometrySnapshot {
+  const mesh = entity.object as THREE.Mesh;
+  const position = mesh.geometry.getAttribute('position');
+  return { entityId: entity.id, positions: Array.from(position.array as ArrayLike<number>) };
+}
+function restoreTerrainGeometry(snapshot: TerrainGeometrySnapshot) {
+  const entity = entities.find(item => item.id === snapshot.entityId);
+  if (!entity || !(entity.object instanceof THREE.Mesh)) return;
+  const position = entity.object.geometry.getAttribute('position');
+  if (position.array.length !== snapshot.positions.length) return;
+  (position.array as Float32Array).set(snapshot.positions);
+  position.needsUpdate = true;
+  entity.object.geometry.computeVertexNormals();
+  entity.object.geometry.computeBoundingBox();
+  entity.object.geometry.computeBoundingSphere();
+  refreshProperties();
+}
+function finishTerrainStroke() {
+  isSculptingTerrain = false;
+  if (!terrainStrokeBefore) return;
+  const before = terrainStrokeBefore;
+  terrainStrokeBefore = null;
+  const entity = entities.find(item => item.id === before.entityId);
+  if (!entity) return;
+  const after = captureTerrainGeometry(entity);
+  if (JSON.stringify(before.positions) === JSON.stringify(after.positions)) return;
+  editorHistory.record({
+    label: 'Sculpt terrain',
+    undo: () => restoreTerrainGeometry(before),
+    redo: () => restoreTerrainGeometry(after)
+  });
+  refreshHistoryButtons();
+}
+renderer.domElement.addEventListener('pointerdown',event=>{ if(!terrainSculptActive||event.button!==0||isPointerLocked)return; const hit=getTerrainHit(event); if(!hit||!selected)return; event.preventDefault(); terrainStrokeBefore = terrainToolMode === 'sculpt' ? captureTerrainGeometry(selected) : null; isSculptingTerrain=true; flattenHeight=selected.object.worldToLocal(hit.point.clone()).z; if(terrainToolMode==='paint'&&hit.uv) paintTerrainAt(selected.object as THREE.Mesh,hit.uv); else if(terrainToolMode==='sculpt') sculptTerrain(selected.object as THREE.Mesh,hit.point,sculptMode,brushRadius,brushStrength,flattenHeight); renderer.domElement.setPointerCapture(event.pointerId); });
 renderer.domElement.addEventListener('pointermove',event=>{ if(!terrainSculptActive)return; const hit=getTerrainHit(event); if(hit){ brushCursor.position.copy(hit.point); brushCursor.position.y+=0.04; brushCursor.scale.setScalar(brushRadius); brushCursor.visible=true; } else brushCursor.visible=false; if(isSculptingTerrain&&hit&&selected){ if(terrainToolMode==='paint'&&hit.uv)paintTerrainAt(selected.object as THREE.Mesh,hit.uv); else if(terrainToolMode==='sculpt')sculptTerrain(selected.object as THREE.Mesh,hit.point,sculptMode,brushRadius,brushStrength,flattenHeight); } });
-const stopTerrainSculpt=()=>{isSculptingTerrain=false;}; renderer.domElement.addEventListener('pointerup',stopTerrainSculpt); renderer.domElement.addEventListener('pointercancel',stopTerrainSculpt); window.addEventListener('pointerup',stopTerrainSculpt);
+const stopTerrainSculpt=()=>finishTerrainStroke(); renderer.domElement.addEventListener('pointerup',stopTerrainSculpt); renderer.domElement.addEventListener('pointercancel',stopTerrainSculpt); window.addEventListener('pointerup',stopTerrainSculpt);
 
 document.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach(button => {
   button.addEventListener('click', () => {
