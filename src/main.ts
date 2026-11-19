@@ -595,6 +595,7 @@ function attachComponentTransform() {
   }
   clearSelectionTransform();
   const mesh = selected.object;
+  mesh.updateMatrixWorld(true);
   const byId = new Map(selected.editableMesh.vertices.map(vertex => [vertex.id, vertex]));
   const center = new THREE.Vector3();
   const vertices: THREE.Vector3[] = [];
@@ -1656,6 +1657,8 @@ async function textureToDataUrl(texture: THREE.Texture): Promise<string | undefi
 
 async function serializeWorld(): Promise<WorldDocument> {
   // Temporarily restore selected objects to the scene root so saved transforms are world transforms.
+  const restoreComponentTransform = Boolean(componentTransformPivot);
+  if (restoreComponentTransform) clearComponentTransform();
   clearSelectionTransform();
   const objects: ProjectObject[] = await Promise.all(entities.map(async entity => {
     const object = entity.object;
@@ -1726,7 +1729,8 @@ async function serializeWorld(): Promise<WorldDocument> {
     }
     return data;
   }));
-  attachSelectionTransform();
+  if (restoreComponentTransform) attachComponentTransform();
+  else attachSelectionTransform();
 
   return {
     schemaVersion: 1,
@@ -1787,6 +1791,7 @@ function disposeEntity(entity: Entity) {
 }
 
 async function loadWorld(world: WorldDocument) {
+  clearComponentTransform();
   componentEditor?.clear();
   componentEditor = null;
   componentMode = null;
