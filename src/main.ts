@@ -843,6 +843,58 @@ document.addEventListener('keydown', event => {
   }
 });
 
+
+
+// Resizable Outliner / Asset Library split. Store a pixel height per browser profile.
+const outlinerPanel = document.querySelector<HTMLElement>('.outliner')!;
+const assetLibrary = document.querySelector<HTMLElement>('.asset-library')!;
+const assetResizer = document.querySelector<HTMLElement>('#outliner-asset-resizer')!;
+const assetHeightKey = 'ces-asset-library-height';
+let assetLibraryHeight = Number(localStorage.getItem(assetHeightKey)) || 260;
+const applyAssetLibraryHeight = () => {
+  const panelHeight = outlinerPanel.clientHeight;
+  const minAsset = 150;
+  const minOutliner = 120;
+  const maxAsset = Math.max(minAsset, panelHeight - minOutliner - 150);
+  assetLibraryHeight = THREE.MathUtils.clamp(assetLibraryHeight, minAsset, maxAsset);
+  assetLibrary.style.height = `${assetLibraryHeight}px`;
+  assetResizer.setAttribute('aria-valuenow', String(Math.round(assetLibraryHeight)));
+};
+applyAssetLibraryHeight();
+new ResizeObserver(applyAssetLibraryHeight).observe(outlinerPanel);
+let resizingAssetLibrary = false;
+let resizeStartY = 0;
+let resizeStartHeight = 0;
+assetResizer.addEventListener('pointerdown', event => {
+  resizingAssetLibrary = true;
+  resizeStartY = event.clientY;
+  resizeStartHeight = assetLibraryHeight;
+  assetResizer.setPointerCapture(event.pointerId);
+  document.body.classList.add('resizing-panels');
+  event.preventDefault();
+});
+assetResizer.addEventListener('pointermove', event => {
+  if (!resizingAssetLibrary) return;
+  // Moving the divider upward increases the Asset Library height.
+  assetLibraryHeight = resizeStartHeight - (event.clientY - resizeStartY);
+  applyAssetLibraryHeight();
+});
+const finishAssetResize = () => {
+  if (!resizingAssetLibrary) return;
+  resizingAssetLibrary = false;
+  document.body.classList.remove('resizing-panels');
+  localStorage.setItem(assetHeightKey, String(Math.round(assetLibraryHeight)));
+};
+assetResizer.addEventListener('pointerup', finishAssetResize);
+assetResizer.addEventListener('pointercancel', finishAssetResize);
+assetResizer.addEventListener('keydown', event => {
+  if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+  event.preventDefault();
+  assetLibraryHeight += event.key === 'ArrowUp' ? 20 : -20;
+  applyAssetLibraryHeight();
+  localStorage.setItem(assetHeightKey, String(Math.round(assetLibraryHeight)));
+});
+
 function refreshOutliner() {
   objectList.innerHTML = '';
   const folderBar = document.createElement('div');
@@ -1666,14 +1718,24 @@ transform.addEventListener('objectChange', () => {
 });
 
 renderer.domElement.addEventListener('contextmenu', event => event.preventDefault());
-renderer.domElement.addEventListener('mousedown', event => {
-  if (event.button === 2 && !isPointerLocked) renderer.domElement.requestPointerLock();
+
+const cameraModeButton = document.querySelector<HTMLButtonElement>('#camera-mode-toggle')!;
+cameraModeButton.addEventListener('click', () => {
+  if (isPointerLocked) {
+    document.exitPointerLock();
+  } else {
+    previewCamera = null;
+    renderer.domElement.requestPointerLock();
+  }
 });
 
 document.addEventListener('pointerlockchange', () => {
   isPointerLocked = document.pointerLockElement === renderer.domElement;
   if (isPointerLocked) previewCamera = null;
   cameraStatus.textContent = isPointerLocked ? 'CAMERA: FLY MODE' : 'CAMERA: FREE';
+  cameraModeButton.classList.toggle('active', isPointerLocked);
+  cameraModeButton.setAttribute('aria-pressed', String(isPointerLocked));
+  cameraModeButton.textContent = isPointerLocked ? 'Exit Camera Mode' : 'Camera Mode';
 });
 
 document.addEventListener('mousemove', event => {
