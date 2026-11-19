@@ -596,6 +596,7 @@ function recordMeshEdit(before: EditableMeshData, after: EditableMeshData) {
     undo: () => restoreMeshEdit(entityId, beforeSnapshot),
     redo: () => restoreMeshEdit(entityId, afterSnapshot)
   });
+  refreshHistoryButtons();
 }
 function restoreMeshEdit(entityId: string, snapshot: EditableMeshData) {
   const entity = entities.find(item => item.id === entityId);
@@ -1941,6 +1942,8 @@ function disposeEntity(entity: Entity) {
 }
 
 async function loadWorld(world: WorldDocument) {
+  editorHistory.clear();
+  refreshHistoryButtons();
   clearComponentTransform();
   componentEditor?.clear();
   componentEditor = null;
@@ -2417,6 +2420,7 @@ function animate() {
 }
 
 animate();
+refreshHistoryButtons();
 refreshOutliner();
 refreshProperties();
 void showProjectManager();
