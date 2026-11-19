@@ -35,6 +35,29 @@ export class MeshComponentEditor {
     this.updateColors();
   }
 
+  /** Returns the unique mesh vertices affected by the current component selection. */
+  getSelectedVertexIds(): string[] {
+    const ids = new Set<string>();
+    if (this.mode === 'vertex') {
+      for (const vertex of this.data.vertices) {
+        if (this.selected.has(vertex.id)) ids.add(vertex.id);
+      }
+    } else if (this.mode === 'edge') {
+      for (const edge of this.data.edges) {
+        if (this.selected.has(edge.id)) edge.vertices.forEach(id => ids.add(id));
+      }
+    } else {
+      for (const face of this.data.faces) {
+        if (this.selected.has(face.id)) face.vertices.forEach(id => ids.add(id));
+      }
+    }
+    return [...ids];
+  }
+
+  refresh() {
+    this.rebuild();
+  }
+
   clear() {
     this.mesh.remove(this.group);
     this.disposeOverlay();
