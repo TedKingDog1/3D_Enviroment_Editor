@@ -16,6 +16,7 @@ import { connectGitHub, listRemoteProjects, loadRemoteProject, saveRemoteProject
 import { createNatureAsset, NATURE_ASSETS, type NatureAssetType } from './assetFactory';
 import { createBoxEditableMesh, editableMeshFromBufferGeometry, editableMeshToBufferGeometry, getEditableMeshStats, type EditableMeshData } from './modeling/EditableMesh';
 import { MeshComponentEditor, type ComponentMode } from './modeling/MeshComponentEditor';
+import { EditorHistory } from './modeling/EditorHistory';
 import './style.css';
 
 interface Entity {
@@ -180,9 +181,7 @@ let componentMode: ComponentMode | null = null;
 let componentTransformPivot: THREE.Group | null = null;
 let componentTransformStartMatrix: THREE.Matrix4 | null = null;
 let componentTransformStartPositions: Map<string, THREE.Vector3> | null = null;
-type MeshHistoryEntry = { entityId: string; before: EditableMeshData; after: EditableMeshData };
-const meshUndoStack: MeshHistoryEntry[] = [];
-const meshRedoStack: MeshHistoryEntry[] = [];
+const editorHistory = new EditorHistory(100);
 let meshTransformBefore: EditableMeshData | null = null;
 
 let terrainSculptActive = false;
@@ -589,9 +588,14 @@ function clearComponentTransform() {
 
 function recordMeshEdit(before: EditableMeshData, after: EditableMeshData) {
   if (!selected || JSON.stringify(before) === JSON.stringify(after)) return;
-  meshUndoStack.push({ entityId: selected.id, before: structuredClone(before), after: structuredClone(after) });
-  if (meshUndoStack.length > 100) meshUndoStack.shift();
-  meshRedoStack.length = 0;
+  const entityId = selected.id;
+  const beforeSnapshot = structuredClone(before);
+  const afterSnapshot = structuredClone(after);
+  editorHistory.record({
+    label: 'Mesh edit',
+    undo: () => restoreMeshEdit(entityId, beforeSnapshot),
+    redo: () => restoreMeshEdit(entityId, afterSnapshot)
+  });
 }
 function restoreMeshEdit(entityId: string, snapshot: EditableMeshData) {
   const entity = entities.find(item => item.id === entityId);
@@ -607,18 +611,14 @@ function restoreMeshEdit(entityId: string, snapshot: EditableMeshData) {
   if (componentEditor) attachComponentTransform();
   refreshProperties();
 }
-function undoMeshEdit() {
-  const entry = meshUndoStack.pop();
-  if (!entry) return;
-  meshRedoStack.push(entry);
-  restoreMeshEdit(entry.entityId, entry.before);
+function refreshHistoryButtons() {
+  const undo = document.querySelector<HTMLButtonElement>('#mesh-undo');
+  const redo = document.querySelector<HTMLButtonElement>('#mesh-redo');
+  if (undo) { undo.disabled = !editorHistory.canUndo; undo.title = editorHistory.undoLabel ?? 'Undo'; }
+  if (redo) { redo.disabled = !editorHistory.canRedo; redo.title = editorHistory.redoLabel ?? 'Redo'; }
 }
-function redoMeshEdit() {
-  const entry = meshRedoStack.pop();
-  if (!entry) return;
-  meshUndoStack.push(entry);
-  restoreMeshEdit(entry.entityId, entry.after);
-}
+function undoMeshEdit() { editorHistory.undo(); refreshHistoryButtons(); }
+function redoMeshEdit() { editorHistory.redo(); refreshHistoryButtons(); }
 function applyNumericComponentMove() {
   if (!selected?.editableMesh || !componentEditor || !(selected.object instanceof THREE.Mesh)) return;
   const ids = componentEditor.getSelectedVertexIds();
