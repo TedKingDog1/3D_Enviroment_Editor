@@ -177,6 +177,10 @@ let selectionAnchor: Entity | null = null;
 let selectionTransformGroup: THREE.Group | null = null;
 let componentEditor: MeshComponentEditor | null = null;
 let componentMode: ComponentMode | null = null;
+let componentTransformPivot: THREE.Group | null = null;
+let componentTransformStartMatrix: THREE.Matrix4 | null = null;
+let componentTransformStartPositions: Map<string, THREE.Vector3> | null = null;
+
 let terrainSculptActive = false;
 let isSculptingTerrain = false;
 let sculptMode: SculptMode = 'raise';
@@ -568,7 +572,87 @@ function attachSelectionTransform() {
   transform.attach(group);
 }
 
+function clearComponentTransform() {
+  if (componentTransformPivot) {
+    transform.detach();
+    scene.remove(componentTransformPivot);
+    componentTransformPivot = null;
+  }
+  componentTransformStartMatrix = null;
+  componentTransformStartPositions = null;
+}
+
+function attachComponentTransform() {
+  clearComponentTransform();
+  if (!componentEditor || !componentMode || !selected?.editableMesh || !(selected.object instanceof THREE.Mesh)) {
+    attachSelectionTransform();
+    return;
+  }
+  const vertexIds = componentEditor.getSelectedVertexIds();
+  if (!vertexIds.length) {
+    clearSelectionTransform();
+    return;
+  }
+  clearSelectionTransform();
+  const mesh = selected.object;
+  const byId = new Map(selected.editableMesh.vertices.map(vertex => [vertex.id, vertex]));
+  const center = new THREE.Vector3();
+  const vertices: THREE.Vector3[] = [];
+  for (const id of vertexIds) {
+    const vertex = byId.get(id);
+    if (!vertex) continue;
+    const worldPosition = mesh.localToWorld(new THREE.Vector3(...vertex.position));
+    vertices.push(worldPosition);
+    center.add(worldPosition);
+  }
+  if (!vertices.length) return;
+  center.divideScalar(vertices.length);
+  const pivot = new THREE.Group();
+  pivot.name = 'Mesh Component Transform Pivot';
+  pivot.position.copy(center);
+  scene.add(pivot);
+  pivot.updateMatrixWorld(true);
+  componentTransformPivot = pivot;
+  transform.attach(pivot);
+}
+
+function beginComponentTransform() {
+  if (!componentTransformPivot || !componentEditor || !selected?.editableMesh) return;
+  componentTransformPivot.updateMatrixWorld(true);
+  componentTransformStartMatrix = componentTransformPivot.matrixWorld.clone();
+  const byId = new Map(selected.editableMesh.vertices.map(vertex => [vertex.id, vertex]));
+  componentTransformStartPositions = new Map();
+  for (const id of componentEditor.getSelectedVertexIds()) {
+    const vertex = byId.get(id);
+    if (vertex) componentTransformStartPositions.set(id, new THREE.Vector3(...vertex.position));
+  }
+}
+
+function updateComponentGeometry() {
+  if (!componentTransformPivot || !componentTransformStartMatrix || !componentTransformStartPositions ||
+      !selected?.editableMesh || !(selected.object instanceof THREE.Mesh)) return;
+  const mesh = selected.object;
+  const data = selected.editableMesh;
+  mesh.updateMatrixWorld(true);
+  componentTransformPivot.updateMatrixWorld(true);
+  const delta = componentTransformPivot.matrixWorld.clone().multiply(componentTransformStartMatrix.clone().invert());
+  const byId = new Map(data.vertices.map(vertex => [vertex.id, vertex]));
+  for (const [id, startPosition] of componentTransformStartPositions) {
+    const vertex = byId.get(id);
+    if (!vertex) continue;
+    const worldPosition = mesh.localToWorld(startPosition.clone());
+    worldPosition.applyMatrix4(delta);
+    const localPosition = mesh.worldToLocal(worldPosition);
+    vertex.position = [localPosition.x, localPosition.y, localPosition.z];
+  }
+  const replacement = editableMeshToBufferGeometry(data);
+  mesh.geometry.dispose();
+  mesh.geometry = replacement;
+  componentEditor?.refresh();
+}
+
 function applySelection(next: Entity[], anchor: Entity | null = next[next.length - 1] ?? null) {
+  clearComponentTransform();
   componentEditor?.clear();
   componentEditor = null;
   componentMode = null;
@@ -1069,9 +1153,11 @@ function refreshProperties() {
     button.addEventListener('click', () => {
       const mode = button.dataset.componentMode;
       if (mode === 'object') {
+        clearComponentTransform();
         componentEditor?.clear();
         componentEditor = null;
         componentMode = null;
+        attachSelectionTransform();
       } else if (entity.editableMesh && entity.object instanceof THREE.Mesh) {
         componentMode = mode as ComponentMode;
         if (componentEditor) componentEditor.setMode(componentMode);
@@ -1079,6 +1165,7 @@ function refreshProperties() {
           componentEditor = new MeshComponentEditor(entity.object, entity.editableMesh);
           componentEditor.setMode(componentMode);
         }
+        attachComponentTransform();
       }
       refreshProperties();
     });
@@ -1475,7 +1562,16 @@ document.querySelector<HTMLInputElement>('#texture-file')!.addEventListener('cha
 transform.addEventListener('dragging-changed', event => {
   isDraggingTransform = Boolean(event.value);
 });
+transform.addEventListener('mouseDown', beginComponentTransform);
+transform.addEventListener('mouseUp', () => {
+  componentTransformStartMatrix = null;
+  componentTransformStartPositions = null;
+});
 transform.addEventListener('objectChange', () => {
+  if (componentTransformPivot) {
+    updateComponentGeometry();
+    return;
+  }
   updateHelpers();
   refreshProperties();
 });
@@ -1522,8 +1618,9 @@ renderer.domElement.addEventListener('click', event => {
     const componentId = componentEditor.pick(raycaster);
     if (componentId) {
       componentEditor.toggle(componentId, event.ctrlKey || event.metaKey);
+      attachComponentTransform();
       const status = document.querySelector<HTMLElement>('#component-selection-status');
-      if (status) status.textContent = `${componentEditor.selected.size} ${componentMode}${componentEditor.selected.size === 1 ? '' : 's'} selected`;
+      if (status) status.textContent = `${componentEditor.selected.size} ${componentMode}${componentEditor.selected.size === 1 ? '' : 's'} selected · use the gizmo to transform`;
       return;
     }
     return;
