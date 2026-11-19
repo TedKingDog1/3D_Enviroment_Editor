@@ -1924,12 +1924,27 @@ document.querySelector<HTMLInputElement>('#texture-file')!.addEventListener('cha
     texture.wrapT = THREE.RepeatWrapping;
     texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
 
-    const material = (selected!.object as THREE.Mesh).material as THREE.MeshStandardMaterial;
-    if (material.map) material.map.dispose();
+    const targetEntity = selected!;
+    const material = (targetEntity.object as THREE.Mesh).material as THREE.MeshStandardMaterial;
+    const previousMap = material.map;
+    const previousColor = material.color.getHex();
     material.map = texture;
     material.color.set(0xffffff);
     material.needsUpdate = true;
+    const restoreMaterialTexture = (map: THREE.Texture | null, color: number) => {
+      material.map = map;
+      material.color.setHex(color);
+      material.needsUpdate = true;
+      refreshProperties();
+    };
+    editorHistory.record({
+      label: 'Apply material texture',
+      undo: () => restoreMaterialTexture(previousMap, previousColor),
+      redo: () => restoreMaterialTexture(texture, 0xffffff)
+    });
+    refreshHistoryButtons();
     refreshProperties();
+    URL.revokeObjectURL(url);
   });
 });
 
