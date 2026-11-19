@@ -15,6 +15,7 @@ import {
 import { connectGitHub, listRemoteProjects, loadRemoteProject, saveRemoteProject } from './githubStorage';
 import { createNatureAsset, NATURE_ASSETS, type NatureAssetType } from './assetFactory';
 import { createBoxEditableMesh, editableMeshFromBufferGeometry, editableMeshToBufferGeometry, getEditableMeshStats, type EditableMeshData } from './modeling/EditableMesh';
+import { MeshComponentEditor, type ComponentMode } from './modeling/MeshComponentEditor';
 import './style.css';
 
 interface Entity {
@@ -174,6 +175,8 @@ let folders: ProjectFolder[] = [];
 const collapsedFolders = new Set<string>();
 let selectionAnchor: Entity | null = null;
 let selectionTransformGroup: THREE.Group | null = null;
+let componentEditor: MeshComponentEditor | null = null;
+let componentMode: ComponentMode | null = null;
 let terrainSculptActive = false;
 let isSculptingTerrain = false;
 let sculptMode: SculptMode = 'raise';
@@ -566,6 +569,9 @@ function attachSelectionTransform() {
 }
 
 function applySelection(next: Entity[], anchor: Entity | null = next[next.length - 1] ?? null) {
+  componentEditor?.clear();
+  componentEditor = null;
+  componentMode = null;
   clearSelectionTransform();
   selectedEntities = new Set(next);
   selected = anchor && selectedEntities.has(anchor) ? anchor : (next[next.length - 1] ?? null);
@@ -965,7 +971,17 @@ function refreshProperties() {
         ${topology
           ? `<p class="muted">Editable mesh · ${topology.vertices} vertices · ${topology.edges} edges · ${topology.faces} faces</p>`
           : '<p class="muted">This object is currently using procedural geometry.</p>'}
-        ${topology ? '' : '<button id="convert-to-editable-mesh" class="wide-button">Convert to Editable Mesh</button>'}
+        ${topology ? `
+          <div class="component-mode-tools">
+            <p class="muted">Component selection</p>
+            <div class="component-mode-buttons">
+              <button type="button" data-component-mode="object" class="${componentMode === null ? 'active' : ''}">Object</button>
+              <button type="button" data-component-mode="vertex" class="${componentMode === 'vertex' ? 'active' : ''}">Vertex</button>
+              <button type="button" data-component-mode="edge" class="${componentMode === 'edge' ? 'active' : ''}">Edge</button>
+              <button type="button" data-component-mode="face" class="${componentMode === 'face' ? 'active' : ''}">Face</button>
+            </div>
+            <p id="component-selection-status" class="muted">${componentMode ? 'Click components in the viewport to select them.' : 'Object mode · select a component mode to begin.'}</p>
+          </div>` : '<button id="convert-to-editable-mesh" class="wide-button">Convert to Editable Mesh</button>'}
       </div>
       <div class="property-group">
         <h3>MATERIAL</h3>
@@ -1048,6 +1064,23 @@ function refreshProperties() {
     ${vectorFields('SCALE', 'scale', object)}
     ${extra}
   `;
+
+  properties.querySelectorAll<HTMLButtonElement>('[data-component-mode]').forEach(button => {
+    button.addEventListener('click', () => {
+      const mode = button.dataset.componentMode;
+      if (mode === 'object') {
+        componentEditor?.clear();
+        componentEditor = null;
+        componentMode = null;
+      } else if (entity.editableMesh && entity.object instanceof THREE.Mesh) {
+        componentMode = mode as ComponentMode;
+        if (componentEditor) componentEditor.setMode(componentMode);
+        else componentEditor = new MeshComponentEditor(entity.object, entity.editableMesh);
+        componentEditor.mode = componentMode;
+      }
+      refreshProperties();
+    });
+  });
 
   properties.querySelector<HTMLButtonElement>('#convert-to-editable-mesh')?.addEventListener('click', () => {
     if (entity.kind !== 'mesh' || entity.editableMesh) return;
@@ -1479,8 +1512,21 @@ renderer.domElement.addEventListener('click', event => {
   const bounds = renderer.domElement.getBoundingClientRect();
   pointer.x = ((event.clientX - bounds.left) / bounds.width) * 2 - 1;
   pointer.y = -((event.clientY - bounds.top) / bounds.height) * 2 + 1;
-
   raycaster.setFromCamera(pointer, editorCamera);
+
+  if (componentEditor && componentMode && selected) {
+    raycaster.params.Points = { threshold: 0.16 };
+    raycaster.params.Line = { threshold: 0.16 };
+    const componentId = componentEditor.pick(raycaster);
+    if (componentId) {
+      componentEditor.toggle(componentId, event.ctrlKey || event.metaKey);
+      const status = document.querySelector<HTMLElement>('#component-selection-status');
+      if (status) status.textContent = `${componentEditor.selected.size} ${componentMode}${componentEditor.selected.size === 1 ? '' : 's'} selected`;
+      return;
+    }
+    return;
+  }
+
   const meshes = entities.filter(e => e.kind === 'mesh').map(e => e.object);
   const hits = raycaster.intersectObjects(meshes, false);
   const entity = hits.length ? entities.find(e => e.object === hits[0].object) ?? null : null;
