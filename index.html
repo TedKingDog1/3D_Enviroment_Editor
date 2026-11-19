@@ -132,6 +132,7 @@
           </div>
           <div class="outliner-heading panel-heading">WORLD OUTLINER</div>
           <div id="object-list"></div>
+          <div id="outliner-asset-resizer" class="panel-resizer" role="separator" aria-orientation="horizontal" aria-label="Resize Outliner and Asset Library" tabindex="0"></div>
           <section class="asset-library">
             <div class="asset-library-heading"><strong>ASSET LIBRARY</strong><span>ENVIRONMENT OBJECTS</span></div>
             <input id="asset-search" class="asset-search" type="search" placeholder="Search assets...">
@@ -154,7 +155,7 @@
             <button id="preview-camera" class="tool">Preview Camera</button>
             <button id="terrain-sculpt-toggle" class="tool">Sculpt Terrain</button>
             <button id="asset-paint-toggle" class="tool">Paint Assets</button>
-            <span class="viewport-hint">Right-click to fly · WASD · Q/E · Shift</span>
+            <button id="camera-mode-toggle" class="tool" aria-pressed="false">Camera Mode</button><span class="viewport-hint">WASD · Q/E · Shift · Esc to exit</span>
           </div>
           <div id="terrain-toolbar" class="terrain-toolbar hidden">
             <div class="terrain-toolbar-title"><strong>TERRAIN SCULPT</strong><span>Click and drag on the selected terrain</span></div>
