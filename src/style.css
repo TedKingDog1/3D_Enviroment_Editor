@@ -753,3 +753,12 @@ html[data-theme="system"] :focus-visible {
 .outliner-folder-label:hover,.outliner-folder-label.active{background:var(--control-bg);color:var(--accent)}
 .object-entry.selected{outline:1px solid color-mix(in srgb,var(--accent) 55%,transparent)}
 .object-entry{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+
+/* Editable mesh component selection */
+.component-mode-tools{display:grid;gap:7px;margin-top:10px;padding-top:10px;border-top:1px solid var(--panel-border)}
+.component-mode-tools>p{margin:0;font-size:10px;line-height:1.45}
+.component-mode-buttons{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}
+.component-mode-buttons button{padding:7px 3px;border:1px solid var(--panel-border);border-radius:4px;background:var(--control-bg);color:var(--control-text);font-size:10px;cursor:pointer}
+.component-mode-buttons button:hover{border-color:var(--accent)}
+.component-mode-buttons button.active{background:color-mix(in srgb,var(--accent) 24%,var(--panel-bg));border-color:var(--accent);color:var(--ui-text);font-weight:700}
