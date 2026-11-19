@@ -13,6 +13,7 @@ export class EditorHistory {
   private redoStack: HistoryCommand[] = [];
   private readonly limit: number;
   private readonly onChange?: () => void;
+  private activeGroup: { label: string; commands: HistoryCommand[] } | null = null;
 
   constructor(limit = 100, onChange?: () => void) {
     this.limit = limit;
@@ -24,7 +25,28 @@ export class EditorHistory {
   get undoLabel(): string | null { return this.undoStack[this.undoStack.length - 1]?.label ?? null; }
   get redoLabel(): string | null { return this.redoStack[this.redoStack.length - 1]?.label ?? null; }
 
+  beginGroup(label: string): void {
+    if (this.activeGroup) throw new Error('A history group is already active.');
+    this.activeGroup = { label, commands: [] };
+  }
+
+  endGroup(): void {
+    const group = this.activeGroup;
+    this.activeGroup = null;
+    if (!group || !group.commands.length) return;
+    const commands = group.commands;
+    this.record({
+      label: group.label,
+      undo: () => { for (let i = commands.length - 1; i >= 0; i--) commands[i].undo(); },
+      redo: () => { for (const command of commands) command.redo(); }
+    });
+  }
+
   record(command: HistoryCommand): void {
+    if (this.activeGroup) {
+      this.activeGroup.commands.push(command);
+      return;
+    }
     this.undoStack.push(command);
     if (this.undoStack.length > this.limit) this.undoStack.shift();
     this.redoStack.length = 0;
@@ -52,6 +74,7 @@ export class EditorHistory {
   }
 
   clear(): void {
+    this.activeGroup = null;
     this.undoStack.length = 0;
     this.redoStack.length = 0;
     this.onChange?.();
