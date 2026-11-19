@@ -180,6 +180,10 @@ let componentMode: ComponentMode | null = null;
 let componentTransformPivot: THREE.Group | null = null;
 let componentTransformStartMatrix: THREE.Matrix4 | null = null;
 let componentTransformStartPositions: Map<string, THREE.Vector3> | null = null;
+type MeshHistoryEntry = { entityId: string; before: EditableMeshData; after: EditableMeshData };
+const meshUndoStack: MeshHistoryEntry[] = [];
+const meshRedoStack: MeshHistoryEntry[] = [];
+let meshTransformBefore: EditableMeshData | null = null;
 
 let terrainSculptActive = false;
 let isSculptingTerrain = false;
@@ -582,6 +586,62 @@ function clearComponentTransform() {
   componentTransformStartPositions = null;
 }
 
+
+function recordMeshEdit(before: EditableMeshData, after: EditableMeshData) {
+  if (!selected || JSON.stringify(before) === JSON.stringify(after)) return;
+  meshUndoStack.push({ entityId: selected.id, before: structuredClone(before), after: structuredClone(after) });
+  if (meshUndoStack.length > 100) meshUndoStack.shift();
+  meshRedoStack.length = 0;
+}
+function restoreMeshEdit(entityId: string, snapshot: EditableMeshData) {
+  const entity = entities.find(item => item.id === entityId);
+  if (!entity || !(entity.object instanceof THREE.Mesh)) return;
+  clearComponentTransform();
+  entity.editableMesh = structuredClone(snapshot);
+  entity.object.geometry.dispose();
+  entity.object.geometry = editableMeshToBufferGeometry(entity.editableMesh);
+  selected = entity;
+  componentEditor?.clear();
+  componentEditor = componentMode ? new MeshComponentEditor(entity.object, entity.editableMesh) : null;
+  if (componentEditor && componentMode) componentEditor.setMode(componentMode);
+  if (componentEditor) attachComponentTransform();
+  refreshProperties();
+}
+function undoMeshEdit() {
+  const entry = meshUndoStack.pop();
+  if (!entry) return;
+  meshRedoStack.push(entry);
+  restoreMeshEdit(entry.entityId, entry.before);
+}
+function redoMeshEdit() {
+  const entry = meshRedoStack.pop();
+  if (!entry) return;
+  meshUndoStack.push(entry);
+  restoreMeshEdit(entry.entityId, entry.after);
+}
+function applyNumericComponentMove() {
+  if (!selected?.editableMesh || !componentEditor || !(selected.object instanceof THREE.Mesh)) return;
+  const ids = componentEditor.getSelectedVertexIds();
+  if (!ids.length) { alert('Select at least one vertex, edge, or face first.'); return; }
+  const dx = Number(document.querySelector<HTMLInputElement>('#component-move-x')?.value ?? 0);
+  const dy = Number(document.querySelector<HTMLInputElement>('#component-move-y')?.value ?? 0);
+  const dz = Number(document.querySelector<HTMLInputElement>('#component-move-z')?.value ?? 0);
+  if (![dx, dy, dz].every(Number.isFinite)) return;
+  if (dx === 0 && dy === 0 && dz === 0) return;
+  const before = structuredClone(selected.editableMesh);
+  const vertexMap = new Map(selected.editableMesh.vertices.map(vertex => [vertex.id, vertex]));
+  for (const id of ids) {
+    const vertex = vertexMap.get(id);
+    if (vertex) vertex.position = [vertex.position[0] + dx, vertex.position[1] + dy, vertex.position[2] + dz];
+  }
+  selected.object.geometry.dispose();
+  selected.object.geometry = editableMeshToBufferGeometry(selected.editableMesh);
+  componentEditor.refresh();
+  recordMeshEdit(before, selected.editableMesh);
+  attachComponentTransform();
+  refreshProperties();
+}
+
 function attachComponentTransform() {
   clearComponentTransform();
   if (!componentEditor || !componentMode || !selected?.editableMesh || !(selected.object instanceof THREE.Mesh)) {
@@ -619,6 +679,7 @@ function attachComponentTransform() {
 
 function beginComponentTransform() {
   if (!componentTransformPivot || !componentEditor || !selected?.editableMesh) return;
+  meshTransformBefore = structuredClone(selected.editableMesh);
   componentTransformPivot.updateMatrixWorld(true);
   componentTransformStartMatrix = componentTransformPivot.matrixWorld.clone();
   const byId = new Map(selected.editableMesh.vertices.map(vertex => [vertex.id, vertex]));
@@ -753,6 +814,17 @@ document.addEventListener('keydown', event => {
   const target = event.target as HTMLElement | null;
   const typing = !!target && (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable);
   if (typing || isPointerLocked || projectManager.classList.contains('visible') || document.querySelector('#settings-panel')?.classList.contains('visible')) return;
+
+  if ((event.ctrlKey || event.metaKey) && event.code === 'KeyZ') {
+    event.preventDefault();
+    if (event.shiftKey) redoMeshEdit(); else undoMeshEdit();
+    return;
+  }
+  if ((event.ctrlKey || event.metaKey) && event.code === 'KeyY') {
+    event.preventDefault();
+    redoMeshEdit();
+    return;
+  }
 
   if (event.code === preferences.keybindings.delete) {
     event.preventDefault();
@@ -1066,6 +1138,16 @@ function refreshProperties() {
               <button type="button" data-component-mode="face" class="${componentMode === 'face' ? 'active' : ''}">Face</button>
             </div>
             <p id="component-selection-status" class="muted">${componentMode ? 'Click components in the viewport to select them.' : 'Object mode · select a component mode to begin.'}</p>
+            ${componentMode ? `
+              <div class="component-transform-fields">
+                <strong>RELATIVE MOVE</strong>
+                <div class="component-axis-fields">
+                  <label class="axis-x">X<input id="component-move-x" type="number" step="0.1" value="0"></label>
+                  <label class="axis-y">Y<input id="component-move-y" type="number" step="0.1" value="0"></label>
+                  <label class="axis-z">Z<input id="component-move-z" type="number" step="0.1" value="0"></label>
+                </div>
+                <button id="component-move-apply" type="button" class="secondary-button">Apply movement</button>
+              </div>` : ''}
           </div>` : '<button id="convert-to-editable-mesh" class="wide-button">Convert to Editable Mesh</button>'}
       </div>
       <div class="property-group">
@@ -1149,6 +1231,8 @@ function refreshProperties() {
     ${vectorFields('SCALE', 'scale', object)}
     ${extra}
   `;
+
+  properties.querySelector<HTMLButtonElement>('#component-move-apply')?.addEventListener('click', applyNumericComponentMove);
 
   properties.querySelectorAll<HTMLButtonElement>('[data-component-mode]').forEach(button => {
     button.addEventListener('click', () => {
@@ -1565,6 +1649,8 @@ transform.addEventListener('dragging-changed', event => {
 });
 transform.addEventListener('mouseDown', beginComponentTransform);
 transform.addEventListener('mouseUp', () => {
+  if (meshTransformBefore && selected?.editableMesh) recordMeshEdit(meshTransformBefore, selected.editableMesh);
+  meshTransformBefore = null;
   componentTransformStartMatrix = null;
   componentTransformStartPositions = null;
 });
