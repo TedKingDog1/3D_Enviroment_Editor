@@ -488,8 +488,17 @@ function registerEntity(object: THREE.Object3D, kind: EntityKind, helper?: THREE
     const index = entities.indexOf(entity);
     editorHistory.record({
       label: 'Create object',
-      undo: () => { detachEntity(entity); applySelection([]); },
-      redo: () => { restoreEntity(entity, index); selectEntity(entity); }
+      undo: () => {
+        const wasSelected = selectedEntities.has(entity);
+        const remaining = [...selectedEntities].filter(item => item !== entity);
+        detachEntity(entity);
+        if (wasSelected) applySelection(remaining);
+        else refreshOutliner();
+      },
+      redo: () => {
+        restoreEntity(entity, index);
+        if (selectAfter) selectEntity(entity);
+      }
     });
     refreshHistoryButtons();
   }
