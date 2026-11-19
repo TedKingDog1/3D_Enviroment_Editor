@@ -182,6 +182,8 @@ let componentTransformPivot: THREE.Group | null = null;
 let componentTransformStartMatrix: THREE.Matrix4 | null = null;
 let componentTransformStartPositions: Map<string, THREE.Vector3> | null = null;
 const editorHistory = new EditorHistory(100);
+let historySuspended = false;
+let isLoadingWorld = false;
 let meshTransformBefore: EditableMeshData | null = null;
 type ObjectTransformSnapshot = { id: string; position: [number, number, number]; rotation: [number, number, number]; scale: [number, number, number]; targetPosition?: [number, number, number] };
 let objectTransformBefore: ObjectTransformSnapshot[] | null = null;
@@ -482,6 +484,35 @@ function registerEntity(object: THREE.Object3D, kind: EntityKind, helper?: THREE
   if (helper) scene.add(helper);
 
   if (selectAfter) selectEntity(entity);
+  if (!historySuspended && !isLoadingWorld) {
+    const index = entities.indexOf(entity);
+    editorHistory.record({
+      label: 'Create object',
+      undo: () => { detachEntity(entity); applySelection([]); },
+      redo: () => { restoreEntity(entity, index); selectEntity(entity); }
+    });
+    refreshHistoryButtons();
+  }
+}
+
+function detachEntity(entity: Entity) {
+  clearSelectionTransform();
+  scene.remove(entity.object);
+  if (entity.helper) scene.remove(entity.helper);
+  if (entity.kind === 'spotLight') scene.remove((entity.object as THREE.SpotLight).target);
+  const index = entities.indexOf(entity);
+  if (index >= 0) entities.splice(index, 1);
+}
+
+function restoreEntity(entity: Entity, index: number) {
+  if (!entities.includes(entity)) entities.splice(Math.min(index, entities.length), 0, entity);
+  scene.add(entity.object);
+  if (entity.helper) scene.add(entity.helper);
+  if (entity.kind === 'spotLight') scene.add((entity.object as THREE.SpotLight).target);
+  if (entity.kind === 'mesh') applyMeshShadowLayers(entity);
+  if (entity.helper && entity.kind === 'spotLight') (entity.helper as THREE.SpotLightHelper).update();
+  refreshOutliner();
+  updateHelpers();
 }
 
 function addObject(type: string) {
@@ -815,31 +846,25 @@ function deleteSelected() {
   const targets = [...selectedEntities];
   if (!targets.length && selected) targets.push(selected);
   if (!targets.length) return;
+  const indexed = targets.map(entity => ({ entity, index: entities.indexOf(entity) })).filter(item => item.index >= 0);
   clearSelectionTransform();
-  for (const target of targets) {
-    scene.remove(target.object);
-    const index = entities.indexOf(target);
-    if (index !== -1) entities.splice(index, 1);
-    if (target.shadowLayer !== undefined) {
-      for (const entity of entities) if (entity.kind === 'mesh') { entity.shadowExcludedLights?.delete(target); applyMeshShadowLayers(entity); }
-    }
-    if (target.object instanceof THREE.Mesh) {
-      target.object.geometry.dispose();
-      const material = target.object.material;
-      (Array.isArray(material) ? material : [material]).forEach(item => item.dispose());
-    }
-    if (target.helper) {
-      scene.remove(target.helper);
-      target.helper.traverse(child => {
-        const visual = child as THREE.Mesh;
-        visual.geometry?.dispose();
-        const material = visual.material;
-        if (material) (Array.isArray(material) ? material : [material]).forEach(item => item.dispose());
-      });
-    }
-    if (target.kind === 'spotLight') scene.remove((target.object as THREE.SpotLight).target);
-  }
+  for (const item of indexed) detachEntity(item.entity);
   applySelection([]);
+  refreshOutliner();
+  editorHistory.record({
+    label: indexed.length > 1 ? 'Delete objects' : 'Delete object',
+    undo: () => {
+      for (const item of [...indexed].sort((a, b) => a.index - b.index)) restoreEntity(item.entity, item.index);
+      applySelection(indexed.map(item => item.entity));
+    },
+    redo: () => {
+      clearSelectionTransform();
+      for (const item of indexed) detachEntity(item.entity);
+      applySelection([]);
+      refreshOutliner();
+    }
+  });
+  refreshHistoryButtons();
 }
 document.querySelector<HTMLButtonElement>('#delete-button')!
   .addEventListener('click', deleteSelected);
@@ -2076,6 +2101,7 @@ async function loadWorld(world: WorldDocument) {
   editorCamera.rotation.set(...world.editorCamera.rotation);
 
   const loadedById = new Map<string, Entity>();
+  isLoadingWorld = true;
   for (const data of world.objects) {
     let object: THREE.Object3D;
     let helper: THREE.Object3D | undefined;
@@ -2172,6 +2198,8 @@ async function loadWorld(world: WorldDocument) {
       if (data.targetPosition) light.target.position.fromArray(data.targetPosition);
     }
   }
+
+  isLoadingWorld = false;
 
   for (const data of world.objects) {
     const entity = loadedById.get(data.id);
