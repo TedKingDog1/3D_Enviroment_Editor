@@ -789,6 +789,8 @@ function deleteSelected() {
 }
 document.querySelector<HTMLButtonElement>('#delete-button')!
   .addEventListener('click', deleteSelected);
+document.querySelector<HTMLButtonElement>('#mesh-undo')?.addEventListener('click', undoMeshEdit);
+document.querySelector<HTMLButtonElement>('#mesh-redo')?.addEventListener('click', redoMeshEdit);
 
 document.addEventListener('keydown', event => {
   if (capturingKeybinding) {
