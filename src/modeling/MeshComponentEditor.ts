@@ -53,10 +53,15 @@ export class MeshComponentEditor {
   }
 
   private disposeOverlay() {
+    this.group.traverse(child => {
+      const visual = child as THREE.Mesh | THREE.Points | THREE.LineSegments;
+      if (visual.geometry) visual.geometry.dispose();
+      const material = visual.material;
+      if (material) (Array.isArray(material) ? material : [material]).forEach(item => item.dispose());
+    });
     this.group.clear();
     this.vertexPoints = null;
     this.edgeLines = null;
-    for (const face of this.faceMeshes) face.geometry.dispose();
     this.faceMeshes = [];
   }
 
