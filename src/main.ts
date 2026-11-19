@@ -14,13 +14,15 @@ import {
 } from './projectStorage';
 import { connectGitHub, listRemoteProjects, loadRemoteProject, saveRemoteProject } from './githubStorage';
 import { createNatureAsset, NATURE_ASSETS, type NatureAssetType } from './assetFactory';
+import { createBoxEditableMesh, editableMeshFromBufferGeometry, editableMeshToBufferGeometry, getEditableMeshStats, type EditableMeshData } from './modeling/EditableMesh';
 import './style.css';
 
 interface Entity {
   id: string;
   object: THREE.Object3D;
   kind: EntityKind;
-  primitiveType?: 'box' | 'sphere' | 'cylinder' | 'plane' | 'terrain' | NatureAssetType;
+  primitiveType?: 'box' | 'sphere' | 'cylinder' | 'plane' | 'terrain' | 'custom' | NatureAssetType;
+  editableMesh?: EditableMeshData;
   helper?: THREE.Object3D;
   name: string;
   folderId?: string;
@@ -956,7 +958,15 @@ function refreshProperties() {
 
   if (entity.kind === 'mesh') {
     const material = (object as THREE.Mesh).material as THREE.MeshStandardMaterial;
+    const topology = entity.editableMesh ? getEditableMeshStats(entity.editableMesh) : null;
     extra = `
+      <div class="property-group">
+        <h3>GEOMETRY</h3>
+        ${topology
+          ? `<p class="muted">Editable mesh · ${topology.vertices} vertices · ${topology.edges} edges · ${topology.faces} faces</p>`
+          : '<p class="muted">This object is currently using procedural geometry.</p>'}
+        ${topology ? '' : '<button id="convert-to-editable-mesh" class="wide-button">Convert to Editable Mesh</button>'}
+      </div>
       <div class="property-group">
         <h3>MATERIAL</h3>
         <div class="property-row material-row">
@@ -1038,6 +1048,25 @@ function refreshProperties() {
     ${vectorFields('SCALE', 'scale', object)}
     ${extra}
   `;
+
+  properties.querySelector<HTMLButtonElement>('#convert-to-editable-mesh')?.addEventListener('click', () => {
+    if (entity.kind !== 'mesh' || entity.editableMesh) return;
+    const mesh = entity.object as THREE.Mesh;
+    let editable: EditableMeshData;
+    if (entity.primitiveType === 'box') {
+      mesh.geometry.computeBoundingBox();
+      const size = mesh.geometry.boundingBox!.getSize(new THREE.Vector3());
+      editable = createBoxEditableMesh(size.x, size.y, size.z);
+    } else {
+      editable = editableMeshFromBufferGeometry(mesh.geometry);
+    }
+    const replacement = editableMeshToBufferGeometry(editable);
+    mesh.geometry.dispose();
+    mesh.geometry = replacement;
+    entity.editableMesh = editable;
+    entity.primitiveType = 'custom';
+    refreshProperties();
+  });
 
   properties.querySelectorAll<HTMLInputElement>('input[data-property]').forEach(input => {
     input.addEventListener('change', () => {
@@ -1498,6 +1527,7 @@ async function serializeWorld(): Promise<WorldDocument> {
     if (entity.kind === 'mesh') {
       const mesh = object as THREE.Mesh;
       const material = mesh.material as THREE.MeshStandardMaterial;
+      if (entity.editableMesh) data.editableMesh = structuredClone(entity.editableMesh);
       data.geometry = { type: entity.primitiveType ?? 'custom', parameters: entity.primitiveType === 'terrain' ? [(mesh.geometry as THREE.PlaneGeometry).parameters.width, (mesh.geometry as THREE.PlaneGeometry).parameters.height, (mesh.geometry as THREE.PlaneGeometry).parameters.widthSegments] : [] };
       if (entity.primitiveType === 'terrain') {
         const geometry = mesh.geometry as THREE.PlaneGeometry;
@@ -1653,7 +1683,9 @@ async function loadWorld(world: WorldDocument) {
     if (data.kind === 'mesh') {
       const type = data.geometry?.type ?? 'box';
       let geometry: THREE.BufferGeometry;
-      if (type === 'terrain') {
+      if (data.editableMesh) {
+        geometry = editableMeshToBufferGeometry(data.editableMesh);
+      } else if (type === 'terrain') {
         const terrain = data.terrainData;
         geometry = createTerrainGeometry(terrain?.width ?? 60, terrain?.depth ?? 60, terrain?.segments ?? 80, terrain?.heights);
       } else if (type === 'sphere') geometry = new THREE.SphereGeometry(1, 32, 20);
@@ -1730,7 +1762,8 @@ async function loadWorld(world: WorldDocument) {
     entity.id = data.id;
     entity.folderId = data.folderId;
     if (data.kind === 'mesh') {
-      entity.primitiveType = data.geometry?.type === 'custom' ? 'box' : (data.geometry?.type ?? 'box') as Entity['primitiveType'];
+      entity.primitiveType = data.geometry?.type === 'custom' ? 'custom' : (data.geometry?.type ?? 'box') as Entity['primitiveType'];
+      if (data.editableMesh) entity.editableMesh = structuredClone(data.editableMesh);
       entity.lightTransmissionEnabled = Boolean(data.lightTransmissionEnabled);
     }
     loadedById.set(data.id, entity);
