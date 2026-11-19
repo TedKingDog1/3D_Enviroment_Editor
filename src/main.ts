@@ -183,6 +183,59 @@ let componentTransformStartMatrix: THREE.Matrix4 | null = null;
 let componentTransformStartPositions: Map<string, THREE.Vector3> | null = null;
 const editorHistory = new EditorHistory(100);
 let meshTransformBefore: EditableMeshData | null = null;
+type ObjectTransformSnapshot = { id: string; position: [number, number, number]; rotation: [number, number, number]; scale: [number, number, number]; targetPosition?: [number, number, number] };
+let objectTransformBefore: ObjectTransformSnapshot[] | null = null;
+
+function captureObjectTransforms(): ObjectTransformSnapshot[] {
+  return [...selectedEntities].map(entity => ({
+    id: entity.id,
+    position: entity.object.position.toArray() as [number, number, number],
+    rotation: [entity.object.rotation.x, entity.object.rotation.y, entity.object.rotation.z],
+    scale: entity.object.scale.toArray() as [number, number, number],
+    ...(entity.kind === 'spotLight' ? { targetPosition: (entity.object as THREE.SpotLight).target.position.toArray() as [number, number, number] } : {})
+  }));
+}
+
+function applyObjectTransforms(snapshot: ObjectTransformSnapshot[]) {
+  for (const state of snapshot) {
+    const entity = entities.find(item => item.id === state.id);
+    if (!entity) continue;
+    entity.object.position.fromArray(state.position);
+    entity.object.rotation.set(...state.rotation);
+    entity.object.scale.fromArray(state.scale);
+    if (state.targetPosition && entity.kind === 'spotLight') {
+      (entity.object as THREE.SpotLight).target.position.fromArray(state.targetPosition);
+    }
+    entity.object.updateMatrixWorld(true);
+    entity.helper?.updateMatrixWorld(true);
+  }
+  updateHelpers();
+  refreshProperties();
+}
+
+function recordObjectTransform(before: ObjectTransformSnapshot[], after: ObjectTransformSnapshot[]) {
+  if (JSON.stringify(before) === JSON.stringify(after)) return;
+  const beforeState = structuredClone(before);
+  const afterState = structuredClone(after);
+  editorHistory.record({
+    label: before.length > 1 ? 'Transform selection' : 'Transform object',
+    undo: () => applyObjectTransforms(beforeState),
+    redo: () => applyObjectTransforms(afterState)
+  });
+  refreshHistoryButtons();
+}
+
+function recordHistoryValue<T>(label: string, before: T, after: T, apply: (value: T) => void) {
+  if (JSON.stringify(before) === JSON.stringify(after)) return;
+  const beforeState = structuredClone(before);
+  const afterState = structuredClone(after);
+  editorHistory.record({
+    label,
+    undo: () => apply(structuredClone(beforeState)),
+    redo: () => apply(structuredClone(afterState))
+  });
+  refreshHistoryButtons();
+}
 
 let terrainSculptActive = false;
 let isSculptingTerrain = false;
@@ -1336,12 +1389,14 @@ function refreshProperties() {
       const value = Number(input.value);
       if (!Number.isFinite(value)) return;
 
+      const before = captureObjectTransforms();
       if (property === 'rotation') {
         (object.rotation as any)[axis] = THREE.MathUtils.degToRad(value);
       } else {
         (object[property as 'position' | 'scale'] as any)[axis] = value;
       }
       updateHelpers();
+      recordObjectTransform(before, captureObjectTransforms());
     });
   });
 
@@ -1379,28 +1434,62 @@ function refreshProperties() {
 
   const colorInput = document.querySelector<HTMLInputElement>('#material-color');
   if (colorInput && entity.kind === 'mesh') {
-    colorInput.addEventListener('input', () => {
-      ((object as THREE.Mesh).material as THREE.MeshStandardMaterial).color.set(colorInput.value);
+    const material = (object as THREE.Mesh).material as THREE.MeshStandardMaterial;
+    let before = material.color.getHexString();
+    colorInput.addEventListener('input', () => material.color.set(colorInput.value));
+    colorInput.addEventListener('change', () => {
+      const after = material.color.getHexString();
+      recordHistoryValue('Change material color', before, after, value => { material.color.set(value); refreshProperties(); });
+      before = after;
     });
   }
 
   const roughness = document.querySelector<HTMLInputElement>('#material-roughness');
-  roughness?.addEventListener('input', () => {
-    ((object as THREE.Mesh).material as THREE.MeshStandardMaterial).roughness = Number(roughness.value);
-  });
+  if (roughness && entity.kind === 'mesh') {
+    const material = (object as THREE.Mesh).material as THREE.MeshStandardMaterial;
+    let before = material.roughness;
+    roughness.addEventListener('input', () => { material.roughness = Number(roughness.value); });
+    roughness.addEventListener('change', () => {
+      const after = material.roughness;
+      recordHistoryValue('Change roughness', before, after, value => { material.roughness = value; refreshProperties(); });
+      before = after;
+    });
+  }
 
   const metalness = document.querySelector<HTMLInputElement>('#material-metalness');
-  metalness?.addEventListener('input', () => {
-    ((object as THREE.Mesh).material as THREE.MeshStandardMaterial).metalness = Number(metalness.value);
-  });
+  if (metalness && entity.kind === 'mesh') {
+    const material = (object as THREE.Mesh).material as THREE.MeshStandardMaterial;
+    let before = material.metalness;
+    metalness.addEventListener('input', () => { material.metalness = Number(metalness.value); });
+    metalness.addEventListener('change', () => {
+      const after = material.metalness;
+      recordHistoryValue('Change metalness', before, after, value => { material.metalness = value; refreshProperties(); });
+      before = after;
+    });
+  }
 
   const lightColor = document.querySelector<HTMLInputElement>('#light-color');
-  lightColor?.addEventListener('input', () => (object as THREE.Light).color.set(lightColor.value));
+  if (lightColor) {
+    const light = object as THREE.Light;
+    let before = light.color.getHexString();
+    lightColor.addEventListener('input', () => light.color.set(lightColor.value));
+    lightColor.addEventListener('change', () => {
+      const after = light.color.getHexString();
+      recordHistoryValue('Change light color', before, after, value => { light.color.set(value); refreshProperties(); });
+      before = after;
+    });
+  }
 
   const intensity = document.querySelector<HTMLInputElement>('#light-intensity');
-  intensity?.addEventListener('change', () => {
-    (object as THREE.Light).intensity = Math.max(0, Number(intensity.value));
-  });
+  if (intensity) {
+    const light = object as THREE.Light;
+    let before = light.intensity;
+    intensity.addEventListener('change', () => {
+      light.intensity = Math.max(0, Number(intensity.value));
+      recordHistoryValue('Change light intensity', before, light.intensity, value => { light.intensity = value; refreshProperties(); });
+      before = light.intensity;
+    });
+  }
 
   const fov = document.querySelector<HTMLInputElement>('#camera-fov');
   fov?.addEventListener('change', () => {
@@ -1702,9 +1791,14 @@ document.querySelector<HTMLInputElement>('#texture-file')!.addEventListener('cha
 transform.addEventListener('dragging-changed', event => {
   isDraggingTransform = Boolean(event.value);
 });
-transform.addEventListener('mouseDown', beginComponentTransform);
+transform.addEventListener('mouseDown', () => {
+  objectTransformBefore = componentTransformPivot ? null : captureObjectTransforms();
+  beginComponentTransform();
+});
 transform.addEventListener('mouseUp', () => {
   if (meshTransformBefore && selected?.editableMesh) recordMeshEdit(meshTransformBefore, selected.editableMesh);
+  if (objectTransformBefore) recordObjectTransform(objectTransformBefore, captureObjectTransforms());
+  objectTransformBefore = null;
   meshTransformBefore = null;
   componentTransformStartMatrix = null;
   componentTransformStartPositions = null;
