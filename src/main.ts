@@ -1435,11 +1435,30 @@ function refreshProperties() {
     } else {
       editable = editableMeshFromBufferGeometry(mesh.geometry);
     }
-    const replacement = editableMeshToBufferGeometry(editable);
+    const beforeGeometry = mesh.geometry.clone();
+    const beforePrimitive = entity.primitiveType;
+    const afterEditable = structuredClone(editable);
+    const applyConversionState = (editableState: EditableMeshData | null, geometry: THREE.BufferGeometry, primitive: Entity['primitiveType']) => {
+      mesh.geometry.dispose();
+      mesh.geometry = geometry.clone();
+      entity.editableMesh = editableState ? structuredClone(editableState) : undefined;
+      entity.primitiveType = primitive;
+      componentEditor?.clear();
+      componentEditor = null;
+      componentMode = null;
+      refreshProperties();
+    };
     mesh.geometry.dispose();
-    mesh.geometry = replacement;
+    mesh.geometry = editableMeshToBufferGeometry(editable);
     entity.editableMesh = editable;
     entity.primitiveType = 'custom';
+    const afterGeometry = mesh.geometry.clone();
+    editorHistory.record({
+      label: 'Convert to editable mesh',
+      undo: () => applyConversionState(null, beforeGeometry, beforePrimitive),
+      redo: () => applyConversionState(afterEditable, afterGeometry, 'custom')
+    });
+    refreshHistoryButtons();
     refreshProperties();
   });
 
@@ -1466,9 +1485,15 @@ function refreshProperties() {
 
   transmissionEnabled?.addEventListener('change', () => {
     if (entity.kind !== 'mesh') return;
-
-    entity.lightTransmissionEnabled = transmissionEnabled.checked;
+    const before = Boolean(entity.lightTransmissionEnabled);
+    const after = transmissionEnabled.checked;
+    entity.lightTransmissionEnabled = after;
     applyMeshShadowLayers(entity);
+    recordHistoryValue('Change light transmission', before, after, value => {
+      entity.lightTransmissionEnabled = value;
+      applyMeshShadowLayers(entity);
+      refreshProperties();
+    });
     refreshProperties();
   });
 
@@ -1482,13 +1507,17 @@ function refreshProperties() {
       const light = availableShadowLights[index];
       if (!light || light.shadowLayer === undefined) return;
 
-      if (input.checked) {
-        entity.shadowExcludedLights?.add(light);
-      } else {
-        entity.shadowExcludedLights?.delete(light);
-      }
-
+      const before = entity.shadowExcludedLights?.has(light) ?? false;
+      const after = input.checked;
+      if (after) entity.shadowExcludedLights?.add(light);
+      else entity.shadowExcludedLights?.delete(light);
       applyMeshShadowLayers(entity);
+      recordHistoryValue('Change light transmission filter', before, after, value => {
+        if (value) entity.shadowExcludedLights?.add(light);
+        else entity.shadowExcludedLights?.delete(light);
+        applyMeshShadowLayers(entity);
+        refreshProperties();
+      });
     });
   });
 
@@ -1554,9 +1583,16 @@ function refreshProperties() {
   const fov = document.querySelector<HTMLInputElement>('#camera-fov');
   fov?.addEventListener('change', () => {
     const camera = object as THREE.PerspectiveCamera;
+    const before = camera.fov;
     camera.fov = THREE.MathUtils.clamp(Number(fov.value), 10, 120);
     camera.updateProjectionMatrix();
     updateHelpers();
+    recordHistoryValue('Change camera field of view', before, camera.fov, value => {
+      camera.fov = value;
+      camera.updateProjectionMatrix();
+      updateHelpers();
+      refreshProperties();
+    });
   });
 
   document.querySelector<HTMLButtonElement>('#use-this-camera')?.addEventListener('click', () => {
