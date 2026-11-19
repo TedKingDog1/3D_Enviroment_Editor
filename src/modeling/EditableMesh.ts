@@ -111,7 +111,7 @@ export function createBoxEditableMesh(width = 1.8, height = 1.8, depth = 1.8): E
     [0, 3, 2, 1], [4, 5, 6, 7], [0, 4, 7, 3],
     [1, 2, 6, 5], [3, 7, 6, 2], [0, 1, 5, 4]
   ];
-  const faces = quads.map((corners, index) => ({
+  const faces = quads.map((corners) => ({
     id: makeId('f'),
     vertices: corners.map(corner => vertices[corner].id),
     uvs: [[0, 0], [1, 0], [1, 1], [0, 1]] as Vec2Tuple[],
