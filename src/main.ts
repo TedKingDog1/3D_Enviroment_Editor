@@ -1642,13 +1642,27 @@ function updateHelpers() {
 
 const assetItems = document.querySelector<HTMLDivElement>('#asset-library-items')!;
 const assetSearch = document.querySelector<HTMLInputElement>('#asset-search')!;
+const assetLibraryStatus = document.querySelector<HTMLDivElement>('#asset-library-status')!;
+const localAssetCategories = document.querySelector<HTMLDivElement>('#local-asset-categories')!;
+const polyHavenTypeRow = document.querySelector<HTMLDivElement>('#polyhaven-type-row')!;
 let activeAssetCategory = 'All';
-function renderAssetLibrary() {
+let activeAssetSource: 'local' | 'polyhaven' = 'local';
+let activePolyHavenType: PolyHavenAssetType = 'models';
+const polyHavenCache = new Map<PolyHavenAssetType, PolyHavenAsset[]>();
+let polyHavenRequestVersion = 0;
+
+function setAssetLibraryStatus(message: string, isError = false) {
+  assetLibraryStatus.textContent = message;
+  assetLibraryStatus.classList.toggle('error', isError);
+}
+
+function renderLocalAssetLibrary() {
   const query = assetSearch.value.trim().toLowerCase();
   const matches = NATURE_ASSETS.filter(asset =>
     (activeAssetCategory === 'All' || asset.category === activeAssetCategory) &&
     (asset.name.toLowerCase().includes(query) || asset.description.toLowerCase().includes(query))
   );
+  assetItems.classList.remove('polyhaven-grid');
   assetItems.innerHTML = matches.map(asset => `
     <button class="asset-card" data-asset="${asset.type}" title="${asset.description}">
       <span class="asset-card-icon">${asset.icon}</span>
@@ -1659,14 +1673,229 @@ function renderAssetLibrary() {
     button.addEventListener('click', () => addNatureAsset(button.dataset.asset as NatureAssetType))
   );
 }
-assetSearch.addEventListener('input', renderAssetLibrary);
-document.querySelectorAll<HTMLButtonElement>('[data-asset-category]').forEach(button => {
+
+function renderPolyHavenAssetCards() {
+  const assets = polyHavenCache.get(activePolyHavenType) ?? [];
+  const query = assetSearch.value.trim().toLowerCase();
+  const matches = assets.filter(asset =>
+    [asset.name, asset.description, asset.category, ...asset.tags].join(' ').toLowerCase().includes(query)
+  );
+
+  assetItems.replaceChildren();
+  assetItems.classList.add('polyhaven-grid');
+
+  if (!matches.length) {
+    const empty = document.createElement('p');
+    empty.className = 'muted asset-no-results';
+    empty.textContent = assets.length ? 'No assets match your search.' : 'No assets are available in this category.';
+    assetItems.appendChild(empty);
+    return;
+  }
+
+  for (const asset of matches) {
+    const card = document.createElement('button');
+    card.className = 'polyhaven-asset-card';
+    card.type = 'button';
+    card.title = asset.description || asset.name;
+
+    const image = document.createElement('img');
+    image.src = asset.thumbnail_url;
+    image.alt = asset.name;
+    image.loading = 'lazy';
+
+    const name = document.createElement('strong');
+    name.textContent = asset.name;
+
+    const category = document.createElement('small');
+    category.textContent = asset.category || 'Poly Haven';
+
+    const action = document.createElement('span');
+    action.className = 'asset-card-action';
+    action.textContent = activePolyHavenType === 'models'
+      ? '＋ IMPORT MODEL'
+      : activePolyHavenType === 'textures'
+        ? '＋ ADD MATERIAL SAMPLE'
+        : '☼ SET ENVIRONMENT';
+
+    card.append(image, name, category, action);
+    card.addEventListener('click', () => {
+      if (activePolyHavenType === 'models') void importPolyHavenModel(asset);
+      else if (activePolyHavenType === 'textures') void addPolyHavenTextureSample(asset);
+      else void applyPolyHavenHdri(asset);
+    });
+    assetItems.appendChild(card);
+  }
+}
+
+async function loadPolyHavenAssets(type: PolyHavenAssetType) {
+  const cached = polyHavenCache.get(type);
+  if (cached) {
+    renderPolyHavenAssetCards();
+    setAssetLibraryStatus(`${cached.length} environment assets · CC0`);
+    return;
+  }
+
+  const requestVersion = ++polyHavenRequestVersion;
+  setAssetLibraryStatus('Connecting to Poly Haven…');
+  assetItems.replaceChildren();
+  const loading = document.createElement('p');
+  loading.className = 'muted asset-no-results';
+  loading.textContent = 'Loading environment assets…';
+  assetItems.appendChild(loading);
+
+  try {
+    const assets = await getPolyHavenAssets(type);
+    if (requestVersion !== polyHavenRequestVersion || activeAssetSource !== 'polyhaven' || activePolyHavenType !== type) return;
+    polyHavenCache.set(type, assets);
+    renderPolyHavenAssetCards();
+    setAssetLibraryStatus(`${assets.length} environment assets · CC0`);
+  } catch (error) {
+    if (requestVersion !== polyHavenRequestVersion) return;
+    setAssetLibraryStatus(error instanceof Error ? error.message : 'Could not connect to Poly Haven.', true);
+    assetItems.replaceChildren();
+    const message = document.createElement('p');
+    message.className = 'muted asset-no-results';
+    message.textContent = 'The asset catalog could not be loaded. Check the connection and try again.';
+    assetItems.appendChild(message);
+  }
+}
+
+async function importPolyHavenModel(asset: PolyHavenAsset) {
+  setAssetLibraryStatus(`Preparing ${asset.name}…`);
+  try {
+    const url = await getPolyHavenModelUrl(asset.id);
+    const gltf = await new GLTFLoader().loadAsync(url);
+    const model = gltf.scene;
+    model.name = asset.name;
+    model.traverse(child => {
+      if (child instanceof THREE.Mesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
+
+    const direction = new THREE.Vector3();
+    editorCamera.getWorldDirection(direction);
+    model.position.copy(editorCamera.position).add(direction.multiplyScalar(7));
+    model.position.y = 0;
+    registerEntity(model, 'mesh');
+
+    const entity = entities[entities.length - 1];
+    entity.name = asset.name;
+    entity.primitiveType = 'custom';
+    entity.externalAsset = {
+      provider: 'polyhaven',
+      id: asset.id,
+      name: asset.name,
+      category: asset.category,
+      url
+    };
+    refreshProperties();
+    setAssetLibraryStatus(`Imported ${asset.name}.`);
+  } catch (error) {
+    console.error('Poly Haven model import failed:', error);
+    setAssetLibraryStatus(error instanceof Error ? error.message : 'Could not import this model.', true);
+  }
+}
+
+async function addPolyHavenTextureSample(asset: PolyHavenAsset) {
+  setAssetLibraryStatus(`Loading material: ${asset.name}…`);
+  try {
+    const url = await getPolyHavenTextureUrl(asset.id);
+    const texture = await new THREE.TextureLoader().loadAsync(url);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(3, 3);
+
+    const sample = new THREE.Mesh(
+      new THREE.PlaneGeometry(8, 8),
+      new THREE.MeshStandardMaterial({ map: texture, roughness: 0.9, metalness: 0 })
+    );
+    sample.name = `${asset.name} Material Sample`;
+    sample.rotation.x = -Math.PI / 2;
+    const direction = new THREE.Vector3();
+    editorCamera.getWorldDirection(direction);
+    sample.position.copy(editorCamera.position).add(direction.multiplyScalar(7));
+    sample.position.y = 0.025;
+    registerEntity(sample, 'mesh');
+    entities[entities.length - 1].primitiveType = 'custom';
+    setAssetLibraryStatus(`Added material sample: ${asset.name}.`);
+  } catch (error) {
+    console.error('Poly Haven texture import failed:', error);
+    setAssetLibraryStatus(error instanceof Error ? error.message : 'Could not load this texture.', true);
+  }
+}
+
+async function applyPolyHavenHdri(asset: PolyHavenAsset) {
+  setAssetLibraryStatus(`Loading environment: ${asset.name}…`);
+  try {
+    const url = await getPolyHavenHdriUrl(asset.id);
+    const texture = await new RGBELoader().loadAsync(url);
+    texture.mapping = THREE.EquirectangularReflectionMapping;
+    currentEnvironmentHdriTexture?.dispose();
+    currentEnvironmentHdriTexture = texture;
+    currentEnvironmentHdriUrl = url;
+    scene.environment = texture;
+    scene.background = texture;
+    setAssetLibraryStatus(`Environment lighting set: ${asset.name}. Save the project to keep it.`);
+  } catch (error) {
+    console.error('Poly Haven HDRI import failed:', error);
+    setAssetLibraryStatus(error instanceof Error ? error.message : 'Could not load this HDRI.', true);
+  }
+}
+
+function renderAssetLibrary() {
+  const isPolyHaven = activeAssetSource === 'polyhaven';
+  localAssetCategories.classList.toggle('hidden', isPolyHaven);
+  polyHavenTypeRow.classList.toggle('hidden', !isPolyHaven);
+  assetSearch.placeholder = isPolyHaven ? 'Search Poly Haven environment assets…' : 'Search local assets…';
+
+  if (isPolyHaven) {
+    renderPolyHavenAssetCards();
+    void loadPolyHavenAssets(activePolyHavenType);
+    return;
+  }
+
+  setAssetLibraryStatus('');
+  renderLocalAssetLibrary();
+}
+
+assetSearch.addEventListener('input', () => {
+  if (activeAssetSource === 'polyhaven') renderPolyHavenAssetCards();
+  else renderLocalAssetLibrary();
+});
+
+document.querySelectorAll<HTMLButtonElement>('[data-asset-source]').forEach(button => {
   button.addEventListener('click', () => {
-    activeAssetCategory = button.dataset.assetCategory!;
-    document.querySelectorAll('[data-asset-category]').forEach(item => item.classList.toggle('active', item === button));
+    activeAssetSource = button.dataset.assetSource as 'local' | 'polyhaven';
+    document.querySelectorAll<HTMLButtonElement>('[data-asset-source]').forEach(tab =>
+      tab.classList.toggle('active', tab === button)
+    );
     renderAssetLibrary();
   });
 });
+
+document.querySelectorAll<HTMLButtonElement>('[data-polyhaven-type]').forEach(button => {
+  button.addEventListener('click', () => {
+    activePolyHavenType = button.dataset.polyhavenType as PolyHavenAssetType;
+    document.querySelectorAll<HTMLButtonElement>('[data-polyhaven-type]').forEach(tab =>
+      tab.classList.toggle('active', tab === button)
+    );
+    renderAssetLibrary();
+  });
+});
+
+document.querySelectorAll<HTMLButtonElement>('[data-asset-category]').forEach(button => {
+  button.addEventListener('click', () => {
+    activeAssetCategory = button.dataset.assetCategory!;
+    document.querySelectorAll<HTMLButtonElement>('[data-asset-category]').forEach(item =>
+      item.classList.toggle('active', item === button)
+    );
+    renderLocalAssetLibrary();
+  });
+});
+
 renderAssetLibrary();
 
 const addMenu = document.querySelector<HTMLDivElement>('#add-menu')!;
