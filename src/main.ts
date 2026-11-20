@@ -1724,7 +1724,7 @@ function renderPolyHavenAssetCards() {
     action.textContent = activePolyHavenType === 'models'
       ? '＋ IMPORT MODEL'
       : activePolyHavenType === 'textures'
-        ? '＋ ADD MATERIAL SAMPLE'
+        ? '＋ APPLY MATERIAL'
         : '☼ SET ENVIRONMENT';
 
     card.append(image, name, category, action);
@@ -1818,19 +1818,46 @@ async function addPolyHavenTextureSample(asset: PolyHavenAsset) {
     texture.wrapT = THREE.RepeatWrapping;
     texture.repeat.set(3, 3);
 
-    const sample = new THREE.Mesh(
-      new THREE.PlaneGeometry(8, 8),
-      new THREE.MeshStandardMaterial({ map: texture, roughness: 0.9, metalness: 0 })
-    );
-    sample.name = `${asset.name} Material Sample`;
-    sample.rotation.x = -Math.PI / 2;
-    const direction = new THREE.Vector3();
-    editorCamera.getWorldDirection(direction);
-    sample.position.copy(editorCamera.position).add(direction.multiplyScalar(7));
-    sample.position.y = 0.025;
-    registerEntity(sample, 'mesh');
-    entities[entities.length - 1].primitiveType = 'custom';
-    setAssetLibraryStatus(`Added material sample: ${asset.name}.`);
+    const target = selected?.kind === 'mesh' &&
+      selected.object instanceof THREE.Mesh &&
+      !selected.externalAsset &&
+      selected.object.material instanceof THREE.MeshStandardMaterial
+      ? selected.object
+      : null;
+
+    if (target) {
+      const material = target.material as THREE.MeshStandardMaterial;
+      const previousMap = material.map;
+      const previousColor = material.color.getHex();
+      const applyMap = (map: THREE.Texture | null, color: number) => {
+        material.map = map;
+        material.color.setHex(color);
+        material.needsUpdate = true;
+        refreshProperties();
+      };
+      applyMap(texture, 0xffffff);
+      editorHistory.record({
+        label: 'Apply Poly Haven texture',
+        undo: () => applyMap(previousMap, previousColor),
+        redo: () => applyMap(texture, 0xffffff)
+      });
+      refreshHistoryButtons();
+      setAssetLibraryStatus(`Applied ${asset.name} to ${target.name || 'the selected object'}.`);
+    } else {
+      const sample = new THREE.Mesh(
+        new THREE.PlaneGeometry(8, 8),
+        new THREE.MeshStandardMaterial({ map: texture, roughness: 0.9, metalness: 0 })
+      );
+      sample.name = `${asset.name} Material Sample`;
+      sample.rotation.x = -Math.PI / 2;
+      const direction = new THREE.Vector3();
+      editorCamera.getWorldDirection(direction);
+      sample.position.copy(editorCamera.position).add(direction.multiplyScalar(7));
+      sample.position.y = 0.025;
+      registerEntity(sample, 'mesh');
+      entities[entities.length - 1].primitiveType = 'custom';
+      setAssetLibraryStatus(`Added material sample: ${asset.name}.`);
+    }
   } catch (error) {
     console.error('Poly Haven texture import failed:', error);
     setAssetLibraryStatus(error instanceof Error ? error.message : 'Could not load this texture.', true);
