@@ -1360,6 +1360,7 @@ function refreshProperties() {
         <h3>POLY HAVEN ASSET</h3>
         <p class="muted">${escapeHtml(entity.externalAsset.name)}</p>
         <p class="muted">${escapeHtml(entity.externalAsset.category)}</p>
+        <p class="muted">${entity.externalAsset.partIndex === undefined ? 'Complete model' : `Editable mesh part ${entity.externalAsset.partIndex + 1}`}</p>
         <p class="muted">CC0 asset · source: Poly Haven</p>
         <a class="asset-source-link" href="https://polyhaven.com/a/${encodeURIComponent(entity.externalAsset.id)}" target="_blank" rel="noopener noreferrer">View asset details ↗</a>
       </div>`;
