@@ -1834,6 +1834,7 @@ async function addPolyHavenTextureSample(asset: PolyHavenAsset) {
         material.map = map;
         material.color.setHex(color);
         material.needsUpdate = true;
+        if (target.primitiveType === 'terrain') terrainPaintCanvases.delete(target);
         refreshProperties();
       };
       applyMap(texture, 0xffffff);
