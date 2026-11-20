@@ -398,6 +398,43 @@ function applyMeshShadowLayers(entity: Entity) {
     });
   }
 }
+const polyHavenSceneCache = new Map<string, Promise<THREE.Group>>();
+
+function loadPolyHavenScene(url: string): Promise<THREE.Group> {
+  const cached = polyHavenSceneCache.get(url);
+  if (cached) return cached;
+  const pending = new GLTFLoader().loadAsync(url).then(gltf => gltf.scene);
+  polyHavenSceneCache.set(url, pending);
+  pending.catch(() => polyHavenSceneCache.delete(url));
+  return pending;
+}
+
+function clonePolyHavenPart(source: THREE.Mesh): THREE.Mesh {
+  const part = source.clone(false) as THREE.Mesh;
+  part.geometry = source.geometry.clone();
+
+  const cloneMaterial = (material: THREE.Material): THREE.Material => {
+    const copy = material.clone();
+    for (const [key, value] of Object.entries(copy)) {
+      if (value instanceof THREE.Texture) {
+        (copy as unknown as Record<string, unknown>)[key] = value.clone();
+      }
+    }
+    return copy;
+  };
+  part.material = Array.isArray(source.material)
+    ? source.material.map(cloneMaterial)
+    : cloneMaterial(source.material);
+
+  source.updateWorldMatrix(true, false);
+  source.matrixWorld.decompose(part.position, part.quaternion, part.scale);
+  part.matrixAutoUpdate = true;
+  part.updateMatrix();
+  part.castShadow = true;
+  part.receiveShadow = true;
+  return part;
+}
+
 let objectNumber = 0;
 let previewCamera: THREE.PerspectiveCamera | null = null;
 let isPointerLocked = false;
@@ -1016,7 +1053,12 @@ function refreshOutliner() {
     const label = document.createElement('button');
     label.className = 'outliner-folder-label';
     label.textContent = `📁  ${folder.name}`;
-    label.addEventListener('click', () => { selectedFolderId = folder.id; refreshOutliner(); });
+    label.addEventListener('click', () => {
+      selectedFolderId = folder.id;
+      const folderEntities = entities.filter(entity => entity.folderId === folder.id);
+      if (folderEntities.length) applySelection(folderEntities);
+      else refreshOutliner();
+    });
     label.classList.toggle('active', selectedFolderId === folder.id);
     row.addEventListener('dragover', event => event.preventDefault());
     row.addEventListener('drop', event => {
@@ -1322,7 +1364,8 @@ function refreshProperties() {
         <a class="asset-source-link" href="https://polyhaven.com/a/${encodeURIComponent(entity.externalAsset.id)}" target="_blank" rel="noopener noreferrer">View asset details ↗</a>
       </div>`;
   } else if (entity.kind === 'mesh') {
-    const material = (object as THREE.Mesh).material as THREE.MeshStandardMaterial;
+    const meshMaterial = (object as THREE.Mesh).material;
+    const material = (Array.isArray(meshMaterial) ? meshMaterial[0] : meshMaterial) as THREE.MeshStandardMaterial;
     const topology = entity.editableMesh ? getEditableMeshStats(entity.editableMesh) : null;
     extra = `
       <div class="property-group">
@@ -1557,7 +1600,8 @@ function refreshProperties() {
 
   const colorInput = document.querySelector<HTMLInputElement>('#material-color');
   if (colorInput && entity.kind === 'mesh') {
-    const material = (object as THREE.Mesh).material as THREE.MeshStandardMaterial;
+    const meshMaterial = (object as THREE.Mesh).material;
+    const material = (Array.isArray(meshMaterial) ? meshMaterial[0] : meshMaterial) as THREE.MeshStandardMaterial;
     let before = material.color.getHexString();
     colorInput.addEventListener('input', () => material.color.set(colorInput.value));
     colorInput.addEventListener('change', () => {
@@ -1775,38 +1819,87 @@ async function importPolyHavenModel(asset: PolyHavenAsset) {
   setAssetLibraryStatus(`Preparing ${asset.name}…`);
   try {
     const url = await getPolyHavenModelUrl(asset.id);
-    const gltf = await new GLTFLoader().loadAsync(url);
-    const model = gltf.scene;
+    const model = (await loadPolyHavenScene(url)).clone(true);
     model.name = asset.name;
-    model.traverse(child => {
-      if (child instanceof THREE.Mesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-      }
-    });
 
     const direction = new THREE.Vector3();
     editorCamera.getWorldDirection(direction);
     model.position.copy(editorCamera.position).add(direction.multiplyScalar(7));
     model.position.y = 0;
-    registerEntity(model, 'mesh');
+    model.updateMatrixWorld(true);
 
-    const entity = entities[entities.length - 1];
-    entity.name = asset.name;
-    entity.primitiveType = 'custom';
-    entity.externalAsset = {
-      provider: 'polyhaven',
-      id: asset.id,
-      name: asset.name,
-      category: asset.category,
-      url
+    const sourceParts: THREE.Mesh[] = [];
+    model.traverse(child => {
+      if (child instanceof THREE.Mesh && !(child instanceof THREE.SkinnedMesh)) sourceParts.push(child);
+    });
+    if (!sourceParts.length) throw new Error('This model contains no independently editable static meshes.');
+
+    const folder: ProjectFolder = {
+      id: crypto.randomUUID(),
+      name: asset.name
     };
-    refreshProperties();
-    setAssetLibraryStatus(`Imported ${asset.name}.`);
+    folders.push(folder);
+
+    const imported: Entity[] = [];
+    const firstIndex = entities.length;
+    const previousHistorySuspended = historySuspended;
+    historySuspended = true;
+    try {
+      sourceParts.forEach((source, partIndex) => {
+        const part = clonePolyHavenPart(source);
+        const originalName = source.name.trim() || `Part ${partIndex + 1}`;
+        part.name = originalName;
+        registerEntity(part, 'mesh', undefined, false);
+
+        const entity = entities[entities.length - 1];
+        entity.name = originalName;
+        entity.folderId = folder.id;
+        entity.primitiveType = 'custom';
+        entity.externalAsset = {
+          provider: 'polyhaven',
+          id: asset.id,
+          name: asset.name,
+          category: asset.category,
+          url,
+          partIndex
+        };
+        imported.push(entity);
+      });
+    } finally {
+      historySuspended = previousHistorySuspended;
+    }
+
+    refreshOutliner();
+    applySelection(imported);
+
+    editorHistory.record({
+      label: `Import Poly Haven: ${asset.name}`,
+      undo: () => {
+        clearSelectionTransform();
+        for (const entity of imported) detachEntity(entity);
+        folders = folders.filter(item => item.id !== folder.id);
+        applySelection([]);
+      },
+      redo: () => {
+        if (!folders.some(item => item.id === folder.id)) folders.push(folder);
+        imported.forEach((entity, index) => restoreEntity(entity, firstIndex + index));
+        applySelection(imported);
+      }
+    });
+    refreshHistoryButtons();
+
+    const skipped = modelPartCount(model) - sourceParts.length;
+    setAssetLibraryStatus(`Imported ${sourceParts.length} editable parts from ${asset.name}.${skipped ? ` Skipped ${skipped} animated part(s).` : ''}`);
   } catch (error) {
     console.error('Poly Haven model import failed:', error);
     setAssetLibraryStatus(error instanceof Error ? error.message : 'Could not import this model.', true);
   }
+}
+
+function modelPartCount(model: THREE.Object3D): number {
+  let count = 0;
+  model.traverse(child => { if (child instanceof THREE.Mesh) count++; });
+  return count;
 }
 
 async function addPolyHavenTextureSample(asset: PolyHavenAsset) {
@@ -1821,13 +1914,14 @@ async function addPolyHavenTextureSample(asset: PolyHavenAsset) {
 
     const target = selected?.kind === 'mesh' &&
       selected.object instanceof THREE.Mesh &&
-      !selected.externalAsset &&
-      selected.object.material instanceof THREE.MeshStandardMaterial
+      (Array.isArray(selected.object.material)
+        ? selected.object.material[0] instanceof THREE.MeshStandardMaterial
+        : selected.object.material instanceof THREE.MeshStandardMaterial)
       ? selected.object
       : null;
 
     if (target) {
-      const material = target.material as THREE.MeshStandardMaterial;
+      const material = (Array.isArray(target.material) ? target.material[0] : target.material) as THREE.MeshStandardMaterial;
       const previousMap = material.map;
       const previousColor = material.color.getHex();
       const applyMap = (map: THREE.Texture | null, color: number) => {
@@ -2613,14 +2707,19 @@ async function loadWorld(world: WorldDocument) {
     if (data.kind === 'mesh') {
       if (data.externalAsset?.provider === 'polyhaven') {
         try {
-          const gltf = await new GLTFLoader().loadAsync(data.externalAsset.url);
-          object = gltf.scene;
-          object.traverse(child => {
-            if (child instanceof THREE.Mesh) {
-              child.castShadow = true;
-              child.receiveShadow = true;
-            }
-          });
+          if (data.externalAsset.partIndex !== undefined) {
+            const sourceScene = await loadPolyHavenScene(data.externalAsset.url);
+            const sourceParts: THREE.Mesh[] = [];
+            sourceScene.traverse(child => {
+              if (child instanceof THREE.Mesh && !(child instanceof THREE.SkinnedMesh)) sourceParts.push(child);
+            });
+            const sourcePart = sourceParts[data.externalAsset.partIndex];
+            if (!sourcePart) throw new Error(`Part ${data.externalAsset.partIndex} is no longer present in this model.`);
+            object = clonePolyHavenPart(sourcePart);
+          } else {
+            // Backward compatibility for projects saved before per-part importing.
+            object = (await loadPolyHavenScene(data.externalAsset.url)).clone(true);
+          }
         } catch (error) {
           console.warn(`Could not reload Poly Haven asset "${data.externalAsset.name}":`, error);
           const fallback = new THREE.Mesh(
