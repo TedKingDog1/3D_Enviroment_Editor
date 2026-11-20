@@ -126,7 +126,7 @@ export async function getPolyHavenTextureUrl(id: string): Promise<string> {
   const links = collectFileLinks(files);
   const preferred = chooseFile(links, (path, candidate) =>
     path.some(part => ['diffuse', 'albedo', 'color'].includes(part)) &&
-    /\.(png|jpe?g|webp|tif?f)(?:$|\?)/i.test(candidate)
+    /\.(png|jpe?g|webp)(?:$|\?)/i.test(candidate)
   );
   const fallback = chooseFile(links, (_path, candidate) =>
     /\.(png|jpe?g|webp)(?:$|\?)/i.test(candidate)
