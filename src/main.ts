@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+import { getPolyHavenAssets, getPolyHavenHdriUrl, getPolyHavenModelUrl, getPolyHavenTextureUrl, type PolyHavenAsset, type PolyHavenAssetType } from './polyhaven';
 import { createTerrainGeometry, getTerrainHeights, sculptTerrain, type SculptMode } from './terrainTools';
 import {
   createProjectRecord,
@@ -32,6 +35,7 @@ interface Entity {
   shadowLayer?: number;
   shadowExcludedLights?: Set<Entity>;
   lightTransmissionEnabled?: boolean;
+  externalAsset?: NonNullable<ProjectObject['externalAsset']>;
 }
 
 const viewport = document.querySelector<HTMLDivElement>('#viewport')!;
@@ -122,6 +126,8 @@ function closeSettings() {
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x8295a8);
+let currentEnvironmentHdriUrl: string | undefined;
+let currentEnvironmentHdriTexture: THREE.Texture | null = null;
 scene.fog = new THREE.Fog(0x8295a8, 45, 150);
 
 const editorCamera = new THREE.PerspectiveCamera(60, 1, 0.1, 500);
@@ -386,11 +392,10 @@ function applyMeshShadowLayers(entity: Entity) {
       entity.lightTransmissionEnabled &&
       entity.shadowExcludedLights?.has(light);
 
-    if (excluded) {
-      entity.object.layers.disable(light.shadowLayer);
-    } else {
-      entity.object.layers.enable(light.shadowLayer);
-    }
+    entity.object.traverse(child => {
+      if (excluded) child.layers.disable(light.shadowLayer!);
+      else child.layers.enable(light.shadowLayer!);
+    });
   }
 }
 let objectNumber = 0;
@@ -439,13 +444,12 @@ function registerEntity(object: THREE.Object3D, kind: EntityKind, helper?: THREE
     entity.shadowExcludedLights = new Set();
     entity.lightTransmissionEnabled = false;
 
-    object.layers.enable(defaultSunEntity.shadowLayer!);
-
-    for (const existing of entities) {
-      if (existing.shadowLayer !== undefined) {
-        object.layers.enable(existing.shadowLayer);
+    object.traverse(child => {
+      child.layers.enable(defaultSunEntity.shadowLayer!);
+      for (const existing of entities) {
+        if (existing.shadowLayer !== undefined) child.layers.enable(existing.shadowLayer);
       }
-    }
+    });
   } else if (
     kind === 'pointLight' ||
     kind === 'directionalLight' ||
@@ -1297,7 +1301,16 @@ function refreshProperties() {
   let extra = '';
   const availableShadowLights = getShadowLights();
 
-  if (entity.kind === 'mesh') {
+  if (entity.kind === 'mesh' && entity.externalAsset) {
+    extra = `
+      <div class="property-group">
+        <h3>POLY HAVEN ASSET</h3>
+        <p class="muted">${entity.externalAsset.name}</p>
+        <p class="muted">${entity.externalAsset.category}</p>
+        <p class="muted">CC0 asset · source: Poly Haven</p>
+        <a class="asset-source-link" href="https://polyhaven.com/a/${encodeURIComponent(entity.externalAsset.id)}" target="_blank" rel="noopener noreferrer">View asset details ↗</a>
+      </div>`;
+  } else if (entity.kind === 'mesh') {
     const material = (object as THREE.Mesh).material as THREE.MeshStandardMaterial;
     const topology = entity.editableMesh ? getEditableMeshStats(entity.editableMesh) : null;
     extra = `
@@ -2034,8 +2047,10 @@ renderer.domElement.addEventListener('click', event => {
   }
 
   const meshes = entities.filter(e => e.kind === 'mesh').map(e => e.object);
-  const hits = raycaster.intersectObjects(meshes, false);
-  const entity = hits.length ? entities.find(e => e.object === hits[0].object) ?? null : null;
+  const hits = raycaster.intersectObjects(meshes, true);
+  let hitRoot: THREE.Object3D | null = hits[0]?.object ?? null;
+  while (hitRoot && !meshes.includes(hitRoot)) hitRoot = hitRoot.parent;
+  const entity = hitRoot ? entities.find(e => e.object === hitRoot) ?? null : null;
   selectEntity(entity, event.ctrlKey || event.metaKey, event.shiftKey);
 });
 
@@ -2137,7 +2152,10 @@ async function serializeWorld(): Promise<WorldDocument> {
       folderId: entity.folderId
     };
 
-    if (entity.kind === 'mesh') {
+    if (entity.kind === 'mesh' && entity.externalAsset) {
+      data.geometry = { type: 'custom', parameters: [] };
+      data.externalAsset = { ...entity.externalAsset };
+    } else if (entity.kind === 'mesh') {
       const mesh = object as THREE.Mesh;
       const material = mesh.material as THREE.MeshStandardMaterial;
       if (entity.editableMesh) data.editableMesh = structuredClone(entity.editableMesh);
@@ -2204,6 +2222,7 @@ async function serializeWorld(): Promise<WorldDocument> {
         ? `#${scene.background.getHexString()}`
         : '#8295a8',
       fog: { ...fogSettings },
+      environmentMapUrl: currentEnvironmentHdriUrl,
       sun: {
         enabled: sunlight.visible,
         color: `#${sunlight.color.getHexString()}`,
@@ -2235,15 +2254,21 @@ function disposeEntity(entity: Entity) {
   if (entity.kind === 'spotLight') {
     scene.remove((entity.object as THREE.SpotLight).target);
   }
-  if (entity.object instanceof THREE.Mesh) {
-    entity.object.geometry.dispose();
-    const material = entity.object.material;
-    (Array.isArray(material) ? material : [material]).forEach(item => {
-      const standard = item as THREE.MeshStandardMaterial;
-      standard.map?.dispose();
-      item.dispose();
-    });
-  }
+  const disposedTextures = new Set<THREE.Texture>();
+  entity.object.traverse(child => {
+    if (!(child instanceof THREE.Mesh)) return;
+    child.geometry.dispose();
+    const materials = Array.isArray(child.material) ? child.material : [child.material];
+    for (const material of materials) {
+      for (const value of Object.values(material)) {
+        if (value instanceof THREE.Texture && !disposedTextures.has(value)) {
+          disposedTextures.add(value);
+          value.dispose();
+        }
+      }
+      material.dispose();
+    }
+  });
   if (entity.helper) {
     scene.remove(entity.helper);
     entity.helper.traverse(child => {
@@ -2274,7 +2299,23 @@ async function loadWorld(world: WorldDocument) {
   previewCamera = null;
   objectNumber = 0;
 
+  currentEnvironmentHdriUrl = world.settings.environmentMapUrl;
+  currentEnvironmentHdriTexture?.dispose();
+  currentEnvironmentHdriTexture = null;
+  scene.environment = null;
   scene.background = new THREE.Color(world.settings.backgroundColor);
+  if (currentEnvironmentHdriUrl) {
+    try {
+      const hdri = await new RGBELoader().loadAsync(currentEnvironmentHdriUrl);
+      hdri.mapping = THREE.EquirectangularReflectionMapping;
+      currentEnvironmentHdriTexture = hdri;
+      scene.environment = hdri;
+      scene.background = hdri;
+    } catch (error) {
+      console.warn('Could not restore the saved Poly Haven HDRI:', error);
+      currentEnvironmentHdriUrl = undefined;
+    }
+  }
   Object.assign(fogSettings, world.settings.fog);
   updateFog();
 
@@ -2302,50 +2343,72 @@ async function loadWorld(world: WorldDocument) {
     let helper: THREE.Object3D | undefined;
 
     if (data.kind === 'mesh') {
-      const type = data.geometry?.type ?? 'box';
-      let geometry: THREE.BufferGeometry;
-      if (data.editableMesh) {
-        geometry = editableMeshToBufferGeometry(data.editableMesh);
-      } else if (type === 'terrain') {
-        const terrain = data.terrainData;
-        geometry = createTerrainGeometry(terrain?.width ?? 60, terrain?.depth ?? 60, terrain?.segments ?? 80, terrain?.heights);
-      } else if (type === 'sphere') geometry = new THREE.SphereGeometry(1, 32, 20);
-      else if (type === 'oakTree' || type === 'pineTree' || type === 'boulder' || type === 'bush' || type === 'grassClump') geometry = createNatureAsset(type);
-      else if (type === 'cylinder') geometry = new THREE.CylinderGeometry(0.8, 0.8, 1.8, 32);
-      else if (type === 'plane') geometry = new THREE.PlaneGeometry(3, 3);
-      else geometry = new THREE.BoxGeometry(1.8, 1.8, 1.8);
+      if (data.externalAsset?.provider === 'polyhaven') {
+        try {
+          const gltf = await new GLTFLoader().loadAsync(data.externalAsset.url);
+          object = gltf.scene;
+          object.traverse(child => {
+            if (child instanceof THREE.Mesh) {
+              child.castShadow = true;
+              child.receiveShadow = true;
+            }
+          });
+        } catch (error) {
+          console.warn(`Could not reload Poly Haven asset "${data.externalAsset.name}":`, error);
+          const fallback = new THREE.Mesh(
+            new THREE.BoxGeometry(1.8, 1.8, 1.8),
+            new THREE.MeshStandardMaterial({ color: 0xb9c5d5, wireframe: true })
+          );
+          fallback.name = `${data.externalAsset.name} (unavailable)`;
+          object = fallback;
+        }
+      } else {
+        const type = data.geometry?.type ?? 'box';
+        let geometry: THREE.BufferGeometry;
+        if (data.editableMesh) {
+          geometry = editableMeshToBufferGeometry(data.editableMesh);
+        } else if (type === 'terrain') {
+          const terrain = data.terrainData;
+          geometry = createTerrainGeometry(terrain?.width ?? 60, terrain?.depth ?? 60, terrain?.segments ?? 80, terrain?.heights);
+        } else if (type === 'sphere') geometry = new THREE.SphereGeometry(1, 32, 20);
+        else if (type === 'oakTree' || type === 'pineTree' || type === 'boulder' || type === 'bush' || type === 'grassClump') geometry = createNatureAsset(type);
+        else if (type === 'cylinder') geometry = new THREE.CylinderGeometry(0.8, 0.8, 1.8, 32);
+        else if (type === 'plane') geometry = new THREE.PlaneGeometry(3, 3);
+        else geometry = new THREE.BoxGeometry(1.8, 1.8, 1.8);
 
-      const material = new THREE.MeshStandardMaterial({
-        color: data.material?.color ?? '#b9c5d5',
-        roughness: data.material?.roughness ?? 0.72,
-        metalness: data.material?.metalness ?? 0.05,
-        vertexColors: data.material?.vertexColors ?? false
-      });
-      if (data.material?.textureDataUrl) {
-        const texture = await new Promise<THREE.Texture | null>(resolve => {
-          new THREE.TextureLoader().load(data.material!.textureDataUrl!, resolve, undefined, () => resolve(null));
+        const material = new THREE.MeshStandardMaterial({
+          color: data.material?.color ?? '#b9c5d5',
+          roughness: data.material?.roughness ?? 0.72,
+          metalness: data.material?.metalness ?? 0.05,
+          vertexColors: data.material?.vertexColors ?? false
         });
-        if (texture) {
-          texture.colorSpace = THREE.SRGBColorSpace;
-          texture.wrapS = THREE.RepeatWrapping;
-          texture.wrapT = THREE.RepeatWrapping;
-          material.map = texture;
-          material.color.set(0xffffff);
+        if (data.material?.textureDataUrl) {
+          const texture = await new Promise<THREE.Texture | null>(resolve => {
+            new THREE.TextureLoader().load(data.material!.textureDataUrl!, resolve, undefined, () => resolve(null));
+          });
+          if (texture) {
+            texture.colorSpace = THREE.SRGBColorSpace;
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            material.map = texture;
+            material.color.set(0xffffff);
+          }
         }
-      }
-      object = new THREE.Mesh(geometry, material);
-      if (type === 'terrain') { object.rotation.x = -Math.PI / 2; object.position.y = 0.015; }
-      if (type === 'terrain' && (object as THREE.Mesh).material instanceof THREE.MeshStandardMaterial) {
-        const restoredMaterial = (object as THREE.Mesh).material as THREE.MeshStandardMaterial;
-        if (restoredMaterial.map) {
-          const restoredImage = restoredMaterial.map.image as CanvasImageSource;
-          createTerrainPaintMap(object as THREE.Mesh, restoredImage);
-        } else {
-          createTerrainPaintMap(object as THREE.Mesh);
+        object = new THREE.Mesh(geometry, material);
+        if (type === 'terrain') { object.rotation.x = -Math.PI / 2; object.position.y = 0.015; }
+        if (type === 'terrain' && (object as THREE.Mesh).material instanceof THREE.MeshStandardMaterial) {
+          const restoredMaterial = (object as THREE.Mesh).material as THREE.MeshStandardMaterial;
+          if (restoredMaterial.map) {
+            const restoredImage = restoredMaterial.map.image as CanvasImageSource;
+            createTerrainPaintMap(object as THREE.Mesh, restoredImage);
+          } else {
+            createTerrainPaintMap(object as THREE.Mesh);
+          }
         }
+        (object as THREE.Mesh).castShadow = true;
+        (object as THREE.Mesh).receiveShadow = true;
       }
-      (object as THREE.Mesh).castShadow = true;
-      (object as THREE.Mesh).receiveShadow = true;
+    }
     } else if (data.kind === 'pointLight') {
       const settings = data.light!;
       const light = new THREE.PointLight(settings.color, settings.intensity, settings.distance, settings.decay);
@@ -2383,7 +2446,8 @@ async function loadWorld(world: WorldDocument) {
     entity.id = data.id;
     entity.folderId = data.folderId;
     if (data.kind === 'mesh') {
-      entity.primitiveType = data.geometry?.type === 'custom' ? 'custom' : (data.geometry?.type ?? 'box') as Entity['primitiveType'];
+      entity.externalAsset = data.externalAsset;
+      entity.primitiveType = data.externalAsset ? 'custom' : data.geometry?.type === 'custom' ? 'custom' : (data.geometry?.type ?? 'box') as Entity['primitiveType'];
       if (data.editableMesh) entity.editableMesh = structuredClone(data.editableMesh);
       entity.lightTransmissionEnabled = Boolean(data.lightTransmissionEnabled);
     }
