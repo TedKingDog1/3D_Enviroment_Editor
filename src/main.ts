@@ -2485,7 +2485,7 @@ function finishBoxSelection(event: PointerEvent) {
   event.stopImmediatePropagation();
 }
 renderer.domElement.addEventListener('pointerup', finishBoxSelection);
-renderer.domElement.addEventListener('pointercancel', finishBoxSelection);
+renderer.domElement.addEventListener('pointercancel', event => { finishBoxSelection(event); boxSelectionMoved = false; });
 window.addEventListener('pointerup', finishBoxSelection);
 
 renderer.domElement.addEventListener('click', event => {
