@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { createTerrainGeometry, getTerrainHeights, sculptTerrain, type SculptMode } from './terrainTools';
 import {
   createProjectRecord,
@@ -2060,6 +2061,64 @@ async function textureToDataUrl(texture: THREE.Texture): Promise<string | undefi
   }
 }
 
+
+async function exportEnvironmentAsGlb() {
+  const button = document.querySelector<HTMLButtonElement>('#export-glb-button');
+  if (button) { button.disabled = true; button.textContent = 'Exporting…'; }
+  saveStatus.textContent = 'EXPORTING GLB…';
+
+  try {
+    // Export only real scene content. Editor helpers, grid, brush cursors and transform gizmos stay behind.
+    const exportScene = new THREE.Scene();
+    exportScene.name = currentProject?.name || 'Creation Environment';
+    exportScene.add(ambientLight.clone(), sunlight.clone());
+
+    for (const entity of entities) {
+      const object = entity.object.clone(true);
+      object.name = entity.name || object.name || entity.kind;
+
+      // GLTF stores a spot light's target as a separate scene node.
+      if (entity.kind === 'spotLight') {
+        const source = entity.object as THREE.SpotLight;
+        const light = object as THREE.SpotLight;
+        light.target = source.target.clone();
+        exportScene.add(light.target);
+      }
+      exportScene.add(object);
+    }
+
+    const exporter = new GLTFExporter();
+    const result = await exporter.parseAsync(exportScene, {
+      binary: true,
+      onlyVisible: true,
+      trs: false
+    });
+
+    if (!(result instanceof ArrayBuffer)) {
+      throw new Error('The exporter did not produce a binary GLB file.');
+    }
+
+    const blob = new Blob([result], { type: 'model/gltf-binary' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const baseName = (currentProjectName.textContent || 'creation-environment')
+      .trim().replace(/[^a-z0-9-_]+/gi, '-').replace(/^-+|-+$/g, '') || 'creation-environment';
+    link.href = url;
+    link.download = baseName + '.glb';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    saveStatus.textContent = 'GLB EXPORTED';
+  } catch (error) {
+    console.error('GLB export failed:', error);
+    saveStatus.textContent = 'GLB EXPORT FAILED';
+    alert(error instanceof Error ? error.message : 'Could not export this environment.');
+  } finally {
+    if (button) { button.disabled = false; button.textContent = 'Export GLB'; }
+  }
+}
+
 async function serializeWorld(): Promise<WorldDocument> {
   // Temporarily restore selected objects to the scene root so saved transforms are world transforms.
   const restoreComponentTransform = Boolean(componentTransformPivot);
@@ -2613,6 +2672,9 @@ document.querySelector<HTMLButtonElement>('#create-project-button')!
     document.querySelector('#editor-screen')?.classList.remove('hidden');
     saveStatus.textContent = 'PROJECT CREATED';
   });
+
+document.querySelector<HTMLButtonElement>('#export-glb-button')!
+  .addEventListener('click', () => void exportEnvironmentAsGlb());
 
 document.querySelector<HTMLButtonElement>('#save-button')!
   .addEventListener('click', async () => {
