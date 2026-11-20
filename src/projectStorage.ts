@@ -81,6 +81,7 @@ export interface ProjectObject {
     name: string;
     category: string;
     url: string;
+    partIndex?: number;
   };
 }
 
