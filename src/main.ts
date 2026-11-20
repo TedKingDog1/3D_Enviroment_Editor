@@ -2637,7 +2637,6 @@ async function loadWorld(world: WorldDocument) {
         (object as THREE.Mesh).castShadow = true;
         (object as THREE.Mesh).receiveShadow = true;
       }
-    }
     } else if (data.kind === 'pointLight') {
       const settings = data.light!;
       const light = new THREE.PointLight(settings.color, settings.intensity, settings.distance, settings.decay);
