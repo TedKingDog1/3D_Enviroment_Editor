@@ -479,7 +479,7 @@ function registerEntity(object: THREE.Object3D, kind: EntityKind, helper?: THREE
 
       for (const existing of entities) {
         if (existing.kind === 'mesh') {
-          existing.object.layers.enable(layer);
+          existing.object.traverse(child => child.layers.enable(layer));
         }
       }
     }
@@ -1122,6 +1122,16 @@ function deleteSelectedFolder() {
   recordOrganizationChange('Delete folder', before);
 }
 
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, character => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  })[character] ?? character);
+}
+
 function vectorFields(label: string, property: 'position' | 'rotation' | 'scale', object: THREE.Object3D) {
   const vector = property === 'rotation' ? object.rotation : object[property];
   const axes = ['x', 'y', 'z'] as const;
@@ -1305,8 +1315,8 @@ function refreshProperties() {
     extra = `
       <div class="property-group">
         <h3>POLY HAVEN ASSET</h3>
-        <p class="muted">${entity.externalAsset.name}</p>
-        <p class="muted">${entity.externalAsset.category}</p>
+        <p class="muted">${escapeHtml(entity.externalAsset.name)}</p>
+        <p class="muted">${escapeHtml(entity.externalAsset.category)}</p>
         <p class="muted">CC0 asset · source: Poly Haven</p>
         <a class="asset-source-link" href="https://polyhaven.com/a/${encodeURIComponent(entity.externalAsset.id)}" target="_blank" rel="noopener noreferrer">View asset details ↗</a>
       </div>`;
@@ -1416,7 +1426,7 @@ function refreshProperties() {
   }
 
   properties.innerHTML = `
-    <div class="property-title">${entity.name}</div>
+    <div class="property-title">${escapeHtml(entity.name)}</div>
     ${vectorFields('LOCATION', 'position', object)}
     ${vectorFields('ROTATION (DEGREES)', 'rotation', object)}
     ${vectorFields('SCALE', 'scale', object)}
