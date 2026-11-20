@@ -1842,6 +1842,7 @@ async function importPolyHavenModel(asset: PolyHavenAsset) {
       name: asset.name
     };
     folders.push(folder);
+    selectedFolderId = folder.id;
 
     const imported: Entity[] = [];
     const firstIndex = entities.length;
