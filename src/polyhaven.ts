@@ -19,7 +19,7 @@ const API_ROOT = '/polyhaven-api';
 // Keep the in-editor catalog focused on environment-building assets.
 const SAFE_CATEGORIES: Record<Exclude<PolyHavenAssetType, 'hdris'>, string[]> = {
   models: ['Nature', 'Architecture'],
-  textures: ['Nature', 'Ground', 'Stone', 'Wood', 'Concrete', 'Water', 'Brick']
+  textures: ['Ground & Terrain', 'Stone', 'Wood', 'Concrete', 'Brick & Block', 'Asphalt & Bitumen', 'Organic']
 };
 
 async function requestJson<T>(path: string): Promise<T> {
