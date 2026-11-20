@@ -114,6 +114,7 @@
       </header>
 
       <main class="workspace">
+        <div class="workspace-main">
         <aside class="outliner panel">
           <div class="add-menu-wrap">
             <button id="add-menu-toggle" class="add-menu-toggle" aria-expanded="false">＋ Add... <span>▾</span></button>
@@ -133,28 +134,6 @@
           </div>
           <div class="outliner-heading panel-heading">WORLD OUTLINER</div>
           <div id="object-list"></div>
-          <div id="outliner-asset-resizer" class="panel-resizer" role="separator" aria-orientation="horizontal" aria-label="Resize Outliner and Asset Library" tabindex="0"></div>
-          <section class="asset-library">
-            <div class="asset-library-heading"><strong>ASSET LIBRARY</strong><span>ENVIRONMENT ASSETS</span></div>
-            <div class="asset-source-tabs">
-              <button class="asset-source-tab active" data-asset-source="local">Local Assets</button>
-              <button class="asset-source-tab" data-asset-source="polyhaven">Poly Haven</button>
-            </div>
-            <input id="asset-search" class="asset-search" type="search" placeholder="Search assets...">
-            <div id="local-asset-categories" class="asset-category-row">
-              <button class="asset-category active" data-asset-category="All">All</button>
-              <button class="asset-category" data-asset-category="Trees">Trees</button>
-              <button class="asset-category" data-asset-category="Ground">Ground</button>
-            </div>
-            <div id="polyhaven-type-row" class="asset-category-row hidden">
-              <button class="asset-category active" data-polyhaven-type="models">Models</button>
-              <button class="asset-category" data-polyhaven-type="textures">Textures</button>
-              <button class="asset-category" data-polyhaven-type="hdris">HDRIs</button>
-            </div>
-            <div id="asset-library-status" class="asset-library-status" aria-live="polite"></div>
-            <div id="asset-library-items" class="asset-library-items"></div>
-            <div class="asset-library-footer"><a href="https://polyhaven.com" target="_blank" rel="noopener noreferrer">Powered by Poly Haven ↗</a></div>
-          </section>
         </aside>
 
         <section class="viewport-area">
@@ -209,6 +188,31 @@
             <p class="muted">Select an object to edit its properties.</p>
           </div>
         </aside>
+        </div>
+        <div id="asset-library-resizer" class="asset-library-resizer" role="separator" aria-orientation="horizontal" aria-label="Resize Asset Library" tabindex="0"></div>
+        <section class="asset-library">
+          <div class="asset-library-heading"><strong>ASSET LIBRARY</strong><span>ENVIRONMENT ASSETS</span></div>
+          <div class="asset-library-controls">
+            <div class="asset-source-tabs">
+              <button class="asset-source-tab active" data-asset-source="local">Local Assets</button>
+              <button class="asset-source-tab" data-asset-source="polyhaven">Poly Haven</button>
+            </div>
+            <input id="asset-search" class="asset-search" type="search" placeholder="Search assets...">
+            <div id="local-asset-categories" class="asset-category-row">
+              <button class="asset-category active" data-asset-category="All">All</button>
+              <button class="asset-category" data-asset-category="Trees">Trees</button>
+              <button class="asset-category" data-asset-category="Ground">Ground</button>
+            </div>
+            <div id="polyhaven-type-row" class="asset-category-row hidden">
+              <button class="asset-category active" data-polyhaven-type="models">Models</button>
+              <button class="asset-category" data-polyhaven-type="textures">Textures</button>
+              <button class="asset-category" data-polyhaven-type="hdris">HDRIs</button>
+            </div>
+          </div>
+          <div id="asset-library-status" class="asset-library-status" aria-live="polite"></div>
+          <div id="asset-library-items" class="asset-library-items"></div>
+          <div class="asset-library-footer"><a href="https://polyhaven.com" target="_blank" rel="noopener noreferrer">Powered by Poly Haven ↗</a></div>
+        </section>
       </main>
 
 
