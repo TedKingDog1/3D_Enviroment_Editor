@@ -2071,7 +2071,8 @@ async function exportEnvironmentAsGlb() {
     // Export only real scene content. Editor helpers, grid, brush cursors and transform gizmos stay behind.
     const exportScene = new THREE.Scene();
     exportScene.name = currentProject?.name || 'Creation Environment';
-    exportScene.add(ambientLight.clone(), sunlight.clone());
+    // glTF has no native hemisphere/ambient-light equivalent; export the supported directional sun.
+    exportScene.add(sunlight.clone());
 
     for (const entity of entities) {
       const object = entity.object.clone(true);
