@@ -1363,11 +1363,13 @@ function refreshProperties() {
         <p class="muted">CC0 asset · source: Poly Haven</p>
         <a class="asset-source-link" href="https://polyhaven.com/a/${encodeURIComponent(entity.externalAsset.id)}" target="_blank" rel="noopener noreferrer">View asset details ↗</a>
       </div>`;
-  } else if (entity.kind === 'mesh') {
+  }
+
+  if (entity.kind === 'mesh') {
     const meshMaterial = (object as THREE.Mesh).material;
     const material = (Array.isArray(meshMaterial) ? meshMaterial[0] : meshMaterial) as THREE.MeshStandardMaterial;
     const topology = entity.editableMesh ? getEditableMeshStats(entity.editableMesh) : null;
-    extra = `
+    extra += `
       <div class="property-group">
         <h3>GEOMETRY</h3>
         ${topology
