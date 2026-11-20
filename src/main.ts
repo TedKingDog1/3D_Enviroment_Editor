@@ -2390,8 +2390,106 @@ document.addEventListener('keydown', event => {
 document.addEventListener('keyup', event => keys.delete(event.code));
 window.addEventListener('blur', () => keys.clear());
 
+// Alt + drag box selection in the viewport.
+const selectionBox = document.createElement('div');
+selectionBox.className = 'viewport-selection-box';
+selectionBox.hidden = true;
+renderer.domElement.parentElement?.appendChild(selectionBox);
+let boxSelecting = false;
+let boxSelectionMoved = false;
+let boxSelectionStart = { x: 0, y: 0 };
+let boxSelectionPointerId: number | null = null;
+
+function updateSelectionBox(event: PointerEvent) {
+  const bounds = renderer.domElement.getBoundingClientRect();
+  const x = event.clientX - bounds.left;
+  const y = event.clientY - bounds.top;
+  const left = Math.min(boxSelectionStart.x, x);
+  const top = Math.min(boxSelectionStart.y, y);
+  selectionBox.style.left = `${left}px`;
+  selectionBox.style.top = `${top}px`;
+  selectionBox.style.width = `${Math.abs(x - boxSelectionStart.x)}px`;
+  selectionBox.style.height = `${Math.abs(y - boxSelectionStart.y)}px`;
+  if (Math.abs(x - boxSelectionStart.x) + Math.abs(y - boxSelectionStart.y) > 5) boxSelectionMoved = true;
+}
+
+function getEntityScreenBounds(entity: Entity, width: number, height: number) {
+  entity.object.updateMatrixWorld(true);
+  const bounds = new THREE.Box3().setFromObject(entity.object);
+  if (bounds.isEmpty()) return null;
+  const corners = [
+    new THREE.Vector3(bounds.min.x, bounds.min.y, bounds.min.z),
+    new THREE.Vector3(bounds.min.x, bounds.min.y, bounds.max.z),
+    new THREE.Vector3(bounds.min.x, bounds.max.y, bounds.min.z),
+    new THREE.Vector3(bounds.min.x, bounds.max.y, bounds.max.z),
+    new THREE.Vector3(bounds.max.x, bounds.min.y, bounds.min.z),
+    new THREE.Vector3(bounds.max.x, bounds.min.y, bounds.max.z),
+    new THREE.Vector3(bounds.max.x, bounds.max.y, bounds.min.z),
+    new THREE.Vector3(bounds.max.x, bounds.max.y, bounds.max.z)
+  ];
+  const projected = corners.map(point => point.project(editorCamera));
+  if (projected.every(point => point.z < -1 || point.z > 1)) return null;
+  const xs = projected.map(point => (point.x * 0.5 + 0.5) * width);
+  const ys = projected.map(point => (-point.y * 0.5 + 0.5) * height);
+  return {
+    left: Math.min(...xs), right: Math.max(...xs),
+    top: Math.min(...ys), bottom: Math.max(...ys)
+  };
+}
+
+renderer.domElement.addEventListener('pointerdown', event => {
+  if (!event.altKey || event.button !== 0 || terrainSculptActive || assetPaintActive || isPointerLocked || isDraggingTransform || componentEditor) return;
+  boxSelecting = true;
+  boxSelectionMoved = false;
+  boxSelectionPointerId = event.pointerId;
+  const bounds = renderer.domElement.getBoundingClientRect();
+  boxSelectionStart = { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+  selectionBox.hidden = false;
+  selectionBox.style.left = `${boxSelectionStart.x}px`;
+  selectionBox.style.top = `${boxSelectionStart.y}px`;
+  selectionBox.style.width = '0px';
+  selectionBox.style.height = '0px';
+  renderer.domElement.setPointerCapture(event.pointerId);
+  event.preventDefault();
+  event.stopImmediatePropagation();
+});
+
+renderer.domElement.addEventListener('pointermove', event => {
+  if (!boxSelecting || event.pointerId !== boxSelectionPointerId) return;
+  updateSelectionBox(event);
+  event.preventDefault();
+  event.stopImmediatePropagation();
+});
+
+function finishBoxSelection(event: PointerEvent) {
+  if (!boxSelecting || (boxSelectionPointerId !== null && event.pointerId !== boxSelectionPointerId)) return;
+  updateSelectionBox(event);
+  const moved = boxSelectionMoved;
+  boxSelecting = false;
+  boxSelectionPointerId = null;
+  selectionBox.hidden = true;
+  if (!moved) return;
+  const bounds = renderer.domElement.getBoundingClientRect();
+  const left = Math.min(boxSelectionStart.x, event.clientX - bounds.left);
+  const right = Math.max(boxSelectionStart.x, event.clientX - bounds.left);
+  const top = Math.min(boxSelectionStart.y, event.clientY - bounds.top);
+  const bottom = Math.max(boxSelectionStart.y, event.clientY - bounds.top);
+  const matches = entities.filter(entity => {
+    if (entity.kind !== 'mesh' || !entity.object.visible) return false;
+    const projected = getEntityScreenBounds(entity, bounds.width, bounds.height);
+    return !!projected && projected.right >= left && projected.left <= right &&
+      projected.bottom >= top && projected.top <= bottom;
+  });
+  applySelection(matches, matches[matches.length - 1] ?? null);
+  event.preventDefault();
+  event.stopImmediatePropagation();
+}
+renderer.domElement.addEventListener('pointerup', finishBoxSelection);
+renderer.domElement.addEventListener('pointercancel', finishBoxSelection);
+window.addEventListener('pointerup', finishBoxSelection);
+
 renderer.domElement.addEventListener('click', event => {
-  if (terrainSculptActive || assetPaintActive || isPointerLocked || isDraggingTransform) return;
+  if (boxSelecting || boxSelectionMoved || terrainSculptActive || assetPaintActive || isPointerLocked || isDraggingTransform) { boxSelectionMoved = false; return; }
 
   const bounds = renderer.domElement.getBoundingClientRect();
   pointer.x = ((event.clientX - bounds.left) / bounds.width) * 2 - 1;
