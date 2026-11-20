@@ -938,23 +938,24 @@ document.addEventListener('keydown', event => {
 
 
 
-// Resizable Outliner / Asset Library split. Store a pixel height per browser profile.
-const outlinerPanel = document.querySelector<HTMLElement>('.outliner')!;
+// Resizable full-width bottom Asset Library. Persist its height per browser profile.
+const workspacePanel = document.querySelector<HTMLElement>('.workspace')!;
 const assetLibrary = document.querySelector<HTMLElement>('.asset-library')!;
-const assetResizer = document.querySelector<HTMLElement>('#outliner-asset-resizer')!;
+const assetResizer = document.querySelector<HTMLElement>('#asset-library-resizer')!;
 const assetHeightKey = 'ces-asset-library-height';
-let assetLibraryHeight = Number(localStorage.getItem(assetHeightKey)) || 260;
+let assetLibraryHeight = Number(localStorage.getItem(assetHeightKey)) || 240;
 const applyAssetLibraryHeight = () => {
-  const panelHeight = outlinerPanel.clientHeight;
+  const panelHeight = workspacePanel.clientHeight;
   const minAsset = 150;
-  const minOutliner = 120;
-  const maxAsset = Math.max(minAsset, panelHeight - minOutliner - 150);
+  const minWorkspace = 240;
+  const maxAsset = panelHeight - minWorkspace - 6;
+  if (maxAsset < minAsset) return;
   assetLibraryHeight = THREE.MathUtils.clamp(assetLibraryHeight, minAsset, maxAsset);
   assetLibrary.style.height = `${assetLibraryHeight}px`;
   assetResizer.setAttribute('aria-valuenow', String(Math.round(assetLibraryHeight)));
 };
 applyAssetLibraryHeight();
-new ResizeObserver(applyAssetLibraryHeight).observe(outlinerPanel);
+new ResizeObserver(applyAssetLibraryHeight).observe(workspacePanel);
 let resizingAssetLibrary = false;
 let resizeStartY = 0;
 let resizeStartHeight = 0;
