@@ -2517,8 +2517,20 @@ async function serializeWorld(): Promise<WorldDocument> {
     };
 
     if (entity.kind === 'mesh' && entity.externalAsset) {
+      const mesh = object as THREE.Mesh;
+      const meshMaterial = mesh.material;
+      const material = (Array.isArray(meshMaterial) ? meshMaterial[0] : meshMaterial) as THREE.MeshStandardMaterial;
       data.geometry = { type: 'custom', parameters: [] };
       data.externalAsset = { ...entity.externalAsset };
+      data.material = {
+        color: `#${material.color.getHexString()}`,
+        roughness: material.roughness,
+        metalness: material.metalness,
+        vertexColors: material.vertexColors,
+        textureDataUrl: material.map ? await textureToDataUrl(material.map) : undefined
+      };
+      data.lightTransmissionEnabled = Boolean(entity.lightTransmissionEnabled);
+      data.shadowExcludedLightIds = [...(entity.shadowExcludedLights ?? [])].map(light => light.id);
     } else if (entity.kind === 'mesh') {
       const mesh = object as THREE.Mesh;
       const material = mesh.material as THREE.MeshStandardMaterial;
@@ -2718,6 +2730,26 @@ async function loadWorld(world: WorldDocument) {
             const sourcePart = sourceParts[data.externalAsset.partIndex];
             if (!sourcePart) throw new Error(`Part ${data.externalAsset.partIndex} is no longer present in this model.`);
             object = clonePolyHavenPart(sourcePart);
+            const mesh = object as THREE.Mesh;
+            const meshMaterial = mesh.material;
+            const material = (Array.isArray(meshMaterial) ? meshMaterial[0] : meshMaterial) as THREE.MeshStandardMaterial;
+            if (data.material) {
+              material.color.set(data.material.color ?? '#ffffff');
+              material.roughness = data.material.roughness ?? material.roughness;
+              material.metalness = data.material.metalness ?? material.metalness;
+              if (data.material.textureDataUrl) {
+                const texture = await new Promise<THREE.Texture | null>(resolve => {
+                  new THREE.TextureLoader().load(data.material!.textureDataUrl!, resolve, undefined, () => resolve(null));
+                });
+                if (texture) {
+                  texture.colorSpace = THREE.SRGBColorSpace;
+                  texture.wrapS = THREE.RepeatWrapping;
+                  texture.wrapT = THREE.RepeatWrapping;
+                  material.map?.dispose();
+                  material.map = texture;
+                }
+              }
+            }
           } else {
             // Backward compatibility for projects saved before per-part importing.
             object = (await loadPolyHavenScene(data.externalAsset.url)).clone(true);
