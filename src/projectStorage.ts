@@ -29,6 +29,7 @@ export interface WorldSettings {
     color: string;
     size: number;
   };
+  environmentMapUrl?: string;
 }
 
 export interface ProjectObject {
@@ -74,6 +75,13 @@ export interface ProjectObject {
   lightTransmissionEnabled?: boolean;
   shadowExcludedLightIds?: string[];
   folderId?: string;
+  externalAsset?: {
+    provider: 'polyhaven';
+    id: string;
+    name: string;
+    category: string;
+    url: string;
+  };
 }
 
 export interface ProjectFolder { id: string; name: string; parentId?: string; collapsed?: boolean; }
