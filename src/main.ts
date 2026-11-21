@@ -184,6 +184,7 @@ let folders: ProjectFolder[] = [];
 const collapsedFolders = new Set<string>();
 let selectionAnchor: Entity | null = null;
 let selectionTransformGroup: THREE.Group | null = null;
+const selectionTransformParents = new Map<THREE.Object3D, THREE.Object3D | null>();
 let componentEditor: MeshComponentEditor | null = null;
 let componentMode: ComponentMode | null = null;
 let componentTransformPivot: THREE.Group | null = null;
@@ -700,7 +701,12 @@ function addNatureAsset(type: NatureAssetType) {
 function clearSelectionTransform() {
   transform.detach();
   if (selectionTransformGroup) {
-    for (const child of [...selectionTransformGroup.children]) scene.attach(child);
+    for (const child of [...selectionTransformGroup.children]) {
+      const originalParent = selectionTransformParents.get(child);
+      if (originalParent) originalParent.attach(child);
+      else scene.attach(child);
+    }
+    selectionTransformParents.clear();
     scene.remove(selectionTransformGroup);
     selectionTransformGroup = null;
   }
@@ -720,7 +726,10 @@ function attachSelectionTransform() {
   center.divideScalar(selectedEntities.size);
   group.position.copy(center);
   scene.add(group);
-  for (const entity of selectedEntities) group.attach(entity.object);
+  for (const entity of selectedEntities) {
+    selectionTransformParents.set(entity.object, entity.object.parent);
+    group.attach(entity.object);
+  }
   selectionTransformGroup = group;
   transform.attach(group);
 }
@@ -912,6 +921,7 @@ function deleteSelected() {
   const targets = [...selectedEntities];
   if (!targets.length && selected) targets.push(selected);
   if (!targets.length) return;
+  const selectionBeforeDelete = getTopLevelGroupCandidates([...targets]);
   const deleteIds = new Set(targets.map(entity => entity.id));
   let expanded = true;
   while (expanded) {
@@ -933,7 +943,7 @@ function deleteSelected() {
     label: indexed.length > 1 ? 'Delete objects' : 'Delete object',
     undo: () => {
       for (const item of [...indexed].sort((a, b) => a.index - b.index)) restoreEntity(item.entity, item.index);
-      applySelection(indexed.map(item => item.entity));
+      applySelection(selectionBeforeDelete.filter(entity => entities.includes(entity)));
     },
     redo: () => {
       clearSelectionTransform();
