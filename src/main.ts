@@ -1103,6 +1103,7 @@ function groupSelectedEntities(items: Entity[]) {
   if (parent?.kind === 'group') parent.object.attach(group);
 
   const children = [...candidates];
+  const originalParentIds = new Map(children.map(child => [child.id, child.parentGroupId]));
   for (const child of children) {
     group.attach(child.object);
     child.parentGroupId = groupEntity.id;
@@ -1119,10 +1120,12 @@ function groupSelectedEntities(items: Entity[]) {
     undo: () => {
       clearSelectionTransform();
       for (const child of children) {
-        scene.attach(child.object);
-        child.parentGroupId = undefined;
+        const originalParentId = originalParentIds.get(child.id);
+        const originalParent = originalParentId ? entities.find(item => item.id === originalParentId && item.kind === 'group') : undefined;
+        (originalParent?.object ?? scene).attach(child.object);
+        child.parentGroupId = originalParentId;
         if (child.kind === 'spotLight' || child.kind === 'directionalLight') {
-          scene.attach((child.object as THREE.SpotLight | THREE.DirectionalLight).target);
+          (originalParent?.object ?? scene).attach((child.object as THREE.SpotLight | THREE.DirectionalLight).target);
         }
       }
       detachEntity(groupEntity);
