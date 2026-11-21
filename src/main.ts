@@ -32,6 +32,7 @@ interface Entity {
   helper?: THREE.Object3D;
   name: string;
   folderId?: string;
+  parentGroupId?: string;
   shadowLayer?: number;
   shadowExcludedLights?: Set<Entity>;
   lightTransmissionEnabled?: boolean;
@@ -1026,6 +1027,217 @@ assetResizer.addEventListener('keydown', event => {
   localStorage.setItem(assetHeightKey, String(Math.round(assetLibraryHeight)));
 });
 
+function getTopLevelGroupCandidates(items: Entity[]): Entity[] {
+  const selectedIds = new Set(items.map(item => item.id));
+  return items.filter(item => {
+    let parentId = item.parentGroupId;
+    while (parentId) {
+      if (selectedIds.has(parentId)) return false;
+      parentId = entities.find(candidate => candidate.id === parentId)?.parentGroupId;
+    }
+    return true;
+  });
+}
+
+function groupSelectedEntities(items: Entity[]) {
+  const candidates = getTopLevelGroupCandidates(items);
+  if (candidates.length < 2) return;
+  if (candidates.some(item => item.kind === 'group' && item.object === item.object.parent)) {
+    alert('This selection cannot be grouped.');
+    return;
+  }
+  clearSelectionTransform();
+  for (const entity of candidates) entity.object.updateWorldMatrix(true, true);
+  const center = new THREE.Vector3();
+  for (const entity of candidates) center.add(entity.object.getWorldPosition(new THREE.Vector3()));
+  center.divideScalar(candidates.length);
+
+  const parentIds = new Set(candidates.map(item => item.parentGroupId ?? ''));
+  const parentGroupId = parentIds.size === 1 ? (candidates[0].parentGroupId ?? undefined) : undefined;
+  const folderIds = new Set(candidates.map(item => item.folderId ?? ''));
+  const folderId = folderIds.size === 1 ? (candidates[0].folderId ?? undefined) : undefined;
+  const group = new THREE.Group();
+  group.name = `Group ${entities.filter(item => item.kind === 'group').length + 1}`;
+  group.position.copy(center);
+
+  const wasSuspended = historySuspended;
+  historySuspended = true;
+  registerEntity(group, 'group', undefined, false);
+  historySuspended = wasSuspended;
+  const groupEntity = entities[entities.length - 1];
+  groupEntity.folderId = folderId;
+  groupEntity.parentGroupId = parentGroupId;
+  const parent = parentGroupId ? entities.find(item => item.id === parentGroupId) : undefined;
+  if (parent?.kind === 'group') parent.object.attach(group);
+
+  const children = [...candidates];
+  for (const child of children) {
+    group.attach(child.object);
+    child.parentGroupId = groupEntity.id;
+    if (child.kind === 'spotLight' || child.kind === 'directionalLight') {
+      const light = child.object as THREE.SpotLight | THREE.DirectionalLight;
+      group.attach(light.target);
+    }
+  }
+  const groupIndex = entities.indexOf(groupEntity);
+  applySelection([groupEntity]);
+
+  editorHistory.record({
+    label: 'Group selected objects',
+    undo: () => {
+      clearSelectionTransform();
+      for (const child of children) {
+        scene.attach(child.object);
+        child.parentGroupId = undefined;
+        if (child.kind === 'spotLight' || child.kind === 'directionalLight') {
+          scene.attach((child.object as THREE.SpotLight | THREE.DirectionalLight).target);
+        }
+      }
+      detachEntity(groupEntity);
+      applySelection(children);
+    },
+    redo: () => {
+      restoreEntity(groupEntity, groupIndex);
+      if (parent?.kind === 'group') parent.object.attach(group);
+      for (const child of children) {
+        group.attach(child.object);
+        child.parentGroupId = groupEntity.id;
+        if (child.kind === 'spotLight' || child.kind === 'directionalLight') {
+          group.attach((child.object as THREE.SpotLight | THREE.DirectionalLight).target);
+        }
+      }
+      applySelection([groupEntity]);
+    }
+  });
+  refreshHistoryButtons();
+  refreshOutliner();
+}
+
+function joinSelectedMeshes(items: Entity[]) {
+  const meshes = items.filter(item => item.kind === 'mesh' && item.object instanceof THREE.Mesh);
+  if (meshes.length < 2) return;
+  try {
+    clearSelectionTransform();
+    for (const entity of meshes) entity.object.updateWorldMatrix(true, false);
+
+    const positions: number[] = [];
+    const normals: number[] = [];
+    const uvs: number[] = [];
+    const colors: number[] = [];
+    const groups: Array<{ start: number; count: number; materialIndex: number }> = [];
+    const materials: THREE.Material[] = [];
+    const materialIndices = new Map<THREE.Material, number>();
+    let hasColors = false;
+
+    const getMaterialIndex = (material: THREE.Material) => {
+      let index = materialIndices.get(material);
+      if (index === undefined) {
+        index = materials.length;
+        materials.push(material);
+        materialIndices.set(material, index);
+      }
+      return index;
+    };
+
+    for (const entity of meshes) {
+      const mesh = entity.object as THREE.Mesh;
+      const geometry = mesh.geometry;
+      const position = geometry.getAttribute('position');
+      if (!position) continue;
+      const normal = geometry.getAttribute('normal');
+      const uv = geometry.getAttribute('uv');
+      const color = geometry.getAttribute('color');
+      if (color) hasColors = true;
+      const index = geometry.getIndex();
+      const sourceMaterials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      const sourceGroups = geometry.groups.length
+        ? geometry.groups
+        : [{ start: 0, count: index ? index.count : position.count, materialIndex: 0 }];
+      const normalMatrix = new THREE.Matrix3().getNormalMatrix(mesh.matrixWorld);
+      const groupMaterialIndices = sourceMaterials.map(getMaterialIndex);
+
+      for (const sourceGroup of sourceGroups) {
+        const start = positions.length / 3;
+        const materialIndex = groupMaterialIndices[sourceGroup.materialIndex] ?? groupMaterialIndices[0] ?? 0;
+        const end = Math.min(sourceGroup.start + sourceGroup.count, index ? index.count : position.count);
+        for (let offset = sourceGroup.start; offset + 2 < end; offset += 3) {
+          for (let corner = 0; corner < 3; corner++) {
+            const vertexIndex = index ? index.getX(offset + corner) : offset + corner;
+            const point = new THREE.Vector3().fromBufferAttribute(position, vertexIndex).applyMatrix4(mesh.matrixWorld);
+            positions.push(point.x, point.y, point.z);
+            let vertexNormal: THREE.Vector3;
+            if (normal) {
+              vertexNormal = new THREE.Vector3().fromBufferAttribute(normal, vertexIndex).applyMatrix3(normalMatrix).normalize();
+            } else {
+              vertexNormal = new THREE.Vector3(0, 1, 0);
+            }
+            normals.push(vertexNormal.x, vertexNormal.y, vertexNormal.z);
+            if (uv) uvs.push(uv.getX(vertexIndex), uv.getY(vertexIndex));
+            else uvs.push(0, 0);
+            if (color) colors.push(color.getX(vertexIndex), color.getY(vertexIndex), color.getZ(vertexIndex));
+            else colors.push(1, 1, 1);
+          }
+        }
+        const count = positions.length / 3 - start;
+        if (count) groups.push({ start, count, materialIndex });
+      }
+    }
+
+    if (!positions.length) throw new Error('The selected meshes do not contain mergeable triangle geometry.');
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+    geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    if (hasColors) geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    for (const group of groups) geometry.addGroup(group.start, group.count, group.materialIndex);
+    geometry.computeBoundingBox();
+    geometry.computeBoundingSphere();
+
+    const joined = new THREE.Mesh(geometry, materials.length === 1 ? materials[0] : materials);
+    joined.name = `Joined Mesh (${meshes.length})`;
+    joined.castShadow = true;
+    joined.receiveShadow = true;
+    const folderIds = new Set(meshes.map(item => item.folderId ?? ''));
+    const folderId = folderIds.size === 1 ? (meshes[0].folderId ?? undefined) : undefined;
+    const indices = meshes.map(entity => ({ entity, index: entities.indexOf(entity) }));
+    const beforeParents = meshes.map(entity => ({ entity, parentGroupId: entity.parentGroupId }));
+    const wasSuspended = historySuspended;
+    historySuspended = true;
+    for (const entity of meshes) detachEntity(entity);
+    registerEntity(joined, 'mesh', undefined, false);
+    historySuspended = wasSuspended;
+    const joinedEntity = entities[entities.length - 1];
+    joinedEntity.primitiveType = 'custom';
+    joinedEntity.folderId = folderId;
+    const joinedIndex = entities.indexOf(joinedEntity);
+    applySelection([joinedEntity]);
+
+    editorHistory.record({
+      label: 'Join meshes',
+      undo: () => {
+        detachEntity(joinedEntity);
+        for (const item of [...indices].sort((a, b) => a.index - b.index)) {
+          restoreEntity(item.entity, item.index);
+          item.entity.parentGroupId = beforeParents.find(state => state.entity === item.entity)?.parentGroupId;
+          const parent = item.entity.parentGroupId ? entities.find(candidate => candidate.id === item.entity.parentGroupId) : undefined;
+          if (parent?.kind === 'group') parent.object.add(item.entity.object);
+        }
+        applySelection(meshes);
+      },
+      redo: () => {
+        for (const entity of meshes) detachEntity(entity);
+        restoreEntity(joinedEntity, joinedIndex);
+        applySelection([joinedEntity]);
+      }
+    });
+    refreshHistoryButtons();
+    refreshOutliner();
+  } catch (error) {
+    console.error('Could not join selected meshes:', error);
+    alert(error instanceof Error ? error.message : 'Could not join the selected meshes.');
+  }
+}
+
 type OutlinerContextTarget =
   | { kind: 'entity'; entity: Entity }
   | { kind: 'folder'; folder: ProjectFolder };
@@ -1103,7 +1315,23 @@ function showOutlinerContextMenu(event: MouseEvent, target: OutlinerContextTarge
         const movingEntities = selectedEntities.has(target.entity) && selectedEntities.size > 1
           ? [...selectedEntities]
           : [target.entity];
-        for (const entity of movingEntities) entity.folderId = destination.id;
+        for (const entity of movingEntities) {
+          entity.folderId = destination.id;
+          if (entity.kind === 'group') {
+            const descendants = new Set<string>([entity.id]);
+            let changed = true;
+            while (changed) {
+              changed = false;
+              for (const child of entities) {
+                if (child.parentGroupId && descendants.has(child.parentGroupId) && !descendants.has(child.id)) {
+                  descendants.add(child.id);
+                  child.folderId = destination.id;
+                  changed = true;
+                }
+              }
+            }
+          }
+        }
         recordOrganizationChange(movingEntities.length > 1 ? 'Move selected items to folder' : 'Move item to folder', before);
       } else {
         target.folder.parentId = destination.id;
@@ -1118,6 +1346,28 @@ function showOutlinerContextMenu(event: MouseEvent, target: OutlinerContextTarge
   moveItem.append(moveButton, submenu);
   moveButton.addEventListener('click', () => moveItem.classList.toggle('submenu-open'));
   menu.appendChild(moveItem);
+
+  if (target.kind === 'entity') {
+    const picked = selectedEntities.has(target.entity) && selectedEntities.size > 1
+      ? [...selectedEntities]
+      : [target.entity];
+    if (picked.length >= 2) {
+      const groupAction = document.createElement('button');
+      groupAction.className = 'outliner-context-action';
+      groupAction.type = 'button';
+      groupAction.textContent = 'Group selected';
+      groupAction.addEventListener('click', () => { closeMenu(); groupSelectedEntities(picked); });
+      menu.appendChild(groupAction);
+      if (picked.every(entity => entity.kind === 'mesh')) {
+        const joinAction = document.createElement('button');
+        joinAction.className = 'outliner-context-action';
+        joinAction.type = 'button';
+        joinAction.textContent = 'Join selected meshes';
+        joinAction.addEventListener('click', () => { closeMenu(); joinSelectedMeshes(picked); });
+        menu.appendChild(joinAction);
+      }
+    }
+  }
   document.body.appendChild(menu);
 
   const menuWidth = menu.offsetWidth;
@@ -1174,19 +1424,19 @@ function refreshOutliner() {
     row.append(toggle, label);
     objectList.appendChild(row);
     if (!collapsedFolders.has(folder.id)) {
-      entities.filter(entity => entity.folderId === folder.id).forEach(entity => renderEntityRow(entity, depth + 1));
+      entities.filter(entity => entity.folderId === folder.id && !entity.parentGroupId).forEach(entity => renderEntityRow(entity, depth + 1));
       folders.filter(child => child.parentId === folder.id).forEach(child => renderFolder(child, depth + 1));
     }
   };
   folders.filter(folder => !folder.parentId).forEach(folder => renderFolder(folder, 0));
-  entities.filter(entity => !entity.folderId).forEach(entity => renderEntityRow(entity, 0));
+  entities.filter(entity => !entity.folderId && !entity.parentGroupId).forEach(entity => renderEntityRow(entity, 0));
 }
 function renderEntityRow(entity: Entity, depth: number) {
   const entry = document.createElement('button');
   entry.className = `object-entry${selectedEntities.has(entity) ? ' selected' : ''}`;
   entry.addEventListener('contextmenu', event => showOutlinerContextMenu(event, { kind: 'entity', entity }));
   entry.style.paddingLeft = `${10 + depth * 14}px`;
-  const icon = entity.kind === 'mesh' ? '◇' : entity.kind === 'camera' ? '▣' : '☼';
+  const icon = entity.kind === 'group' ? '▣' : entity.kind === 'mesh' ? '◇' : entity.kind === 'camera' ? '▣' : '☼';
   entry.textContent = `${icon}  ${entity.name}`;
   entry.addEventListener('click', event => selectEntity(entity, (event as MouseEvent).ctrlKey || (event as MouseEvent).metaKey, (event as MouseEvent).shiftKey));
   entry.draggable = true;
@@ -1199,6 +1449,10 @@ function renderEntityRow(entity: Entity, depth: number) {
     if (moving) { moving.folderId = entity.folderId; refreshOutliner(); }
   });
   objectList.appendChild(entry);
+  if (entity.kind === 'group') {
+    entities.filter(child => child.parentGroupId === entity.id)
+      .forEach(child => renderEntityRow(child, depth + 1));
+  }
 }
 let selectedFolderId: string | null = null;
 type OrganizationSnapshot = { folders: ProjectFolder[]; entityFolders: Array<{ id: string; folderId?: string }> };
@@ -2659,7 +2913,7 @@ async function exportEnvironmentAsGlb() {
     exportScene.add(sunlight.clone());
 
     for (const entity of entities) {
-      const object = entity.object.clone(true);
+      const object = entity.kind === 'group' ? entity.object.clone(false) : entity.object.clone(true);
       object.name = entity.name || object.name || entity.kind;
 
       // GLTF stores a spot light's target as a separate scene node.
@@ -2669,7 +2923,16 @@ async function exportEnvironmentAsGlb() {
         light.target = source.target.clone();
         exportScene.add(light.target);
       }
-      exportScene.add(object);
+      const parentGroup = entity.parentGroupId
+        ? entities.find(candidate => candidate.id === entity.parentGroupId && candidate.kind === 'group')
+        : undefined;
+      if (parentGroup) {
+        const parentClone = exportScene.getObjectByName(parentGroup.name);
+        if (parentClone) parentClone.add(object);
+        else exportScene.add(object);
+      } else {
+        exportScene.add(object);
+      }
     }
 
     const exporter = new GLTFExporter();
@@ -2718,7 +2981,8 @@ async function serializeWorld(): Promise<WorldDocument> {
       position: object.position.toArray() as [number, number, number],
       rotation: [object.rotation.x, object.rotation.y, object.rotation.z],
       scale: object.scale.toArray() as [number, number, number],
-      folderId: entity.folderId
+      folderId: entity.folderId,
+      parentGroupId: entity.parentGroupId
     };
 
     if (entity.kind === 'mesh' && entity.externalAsset) {
@@ -2923,7 +3187,9 @@ async function loadWorld(world: WorldDocument) {
     let object: THREE.Object3D;
     let helper: THREE.Object3D | undefined;
 
-    if (data.kind === 'mesh') {
+    if (data.kind === 'group') {
+      object = new THREE.Group();
+    } else if (data.kind === 'mesh') {
       if (data.externalAsset?.provider === 'polyhaven') {
         try {
           if (data.externalAsset.partIndex !== undefined) {
@@ -3050,6 +3316,7 @@ async function loadWorld(world: WorldDocument) {
     const entity = entities[entities.length - 1];
     entity.id = data.id;
     entity.folderId = data.folderId;
+    entity.parentGroupId = data.parentGroupId;
     if (data.kind === 'mesh') {
       entity.externalAsset = data.externalAsset;
       entity.primitiveType = data.externalAsset ? 'custom' : data.geometry?.type === 'custom' ? 'custom' : (data.geometry?.type ?? 'box') as Entity['primitiveType'];
@@ -3060,6 +3327,19 @@ async function loadWorld(world: WorldDocument) {
     if (data.kind === 'directionalLight' || data.kind === 'spotLight') {
       const light = object as THREE.DirectionalLight | THREE.SpotLight;
       if (data.targetPosition) light.target.position.fromArray(data.targetPosition);
+    }
+  }
+
+  // Rebuild saved group hierarchy after every entity has been created.
+  for (const data of world.objects) {
+    if (!data.parentGroupId) continue;
+    const child = loadedById.get(data.id);
+    const parent = loadedById.get(data.parentGroupId);
+    if (!child || !parent || parent.kind !== 'group') continue;
+    parent.object.add(child.object);
+    if (child.kind === 'spotLight' || child.kind === 'directionalLight') {
+      const light = child.object as THREE.SpotLight | THREE.DirectionalLight;
+      parent.object.add(light.target);
     }
   }
 
