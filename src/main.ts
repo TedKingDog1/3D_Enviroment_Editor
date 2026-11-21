@@ -3130,9 +3130,10 @@ async function serializeWorld(): Promise<WorldDocument> {
 }
 
 function disposeEntity(entity: Entity) {
-  scene.remove(entity.object);
-  if (entity.kind === 'spotLight') {
-    scene.remove((entity.object as THREE.SpotLight).target);
+  entity.object.parent?.remove(entity.object);
+  if (entity.kind === 'spotLight' || entity.kind === 'directionalLight') {
+    const target = (entity.object as THREE.SpotLight | THREE.DirectionalLight).target;
+    target.parent?.remove(target);
   }
   const disposedTextures = new Set<THREE.Texture>();
   entity.object.traverse(child => {
