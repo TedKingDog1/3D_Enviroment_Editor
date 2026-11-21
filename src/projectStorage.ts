@@ -3,7 +3,8 @@ export type EntityKind =
   | 'pointLight'
   | 'directionalLight'
   | 'spotLight'
-  | 'camera';
+  | 'camera'
+  | 'group';
 
 export interface WorldSettings {
   backgroundColor: string;
@@ -75,6 +76,7 @@ export interface ProjectObject {
   lightTransmissionEnabled?: boolean;
   shadowExcludedLightIds?: string[];
   folderId?: string;
+  parentGroupId?: string;
   externalAsset?: {
     provider: 'polyhaven';
     id: string;
