@@ -1026,6 +1026,109 @@ assetResizer.addEventListener('keydown', event => {
   localStorage.setItem(assetHeightKey, String(Math.round(assetLibraryHeight)));
 });
 
+type OutlinerContextTarget =
+  | { kind: 'entity'; entity: Entity }
+  | { kind: 'folder'; folder: ProjectFolder };
+
+function getFolderDescendantIds(folderId: string): Set<string> {
+  const descendants = new Set<string>([folderId]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const folder of folders) {
+      if (folder.parentId && descendants.has(folder.parentId) && !descendants.has(folder.id)) {
+        descendants.add(folder.id);
+        changed = true;
+      }
+    }
+  }
+  return descendants;
+}
+
+function showOutlinerContextMenu(event: MouseEvent, target: OutlinerContextTarget) {
+  event.preventDefault();
+  event.stopPropagation();
+
+  document.querySelector('.outliner-context-menu')?.remove();
+  const menu = document.createElement('div');
+  menu.className = 'outliner-context-menu';
+  menu.setAttribute('role', 'menu');
+
+  const closeMenu = () => {
+    menu.remove();
+    document.removeEventListener('pointerdown', onOutsidePointer);
+    document.removeEventListener('keydown', onMenuKey);
+  };
+  const onOutsidePointer = (pointerEvent: PointerEvent) => {
+    if (!menu.contains(pointerEvent.target as Node)) closeMenu();
+  };
+  const onMenuKey = (keyEvent: KeyboardEvent) => {
+    if (keyEvent.key === 'Escape') closeMenu();
+  };
+
+  const moveItem = document.createElement('div');
+  moveItem.className = 'outliner-context-item has-submenu';
+  const moveButton = document.createElement('button');
+  moveButton.className = 'outliner-context-action';
+  moveButton.type = 'button';
+  moveButton.textContent = target.kind === 'entity' && selectedEntities.has(target.entity) && selectedEntities.size > 1
+    ? `Move ${selectedEntities.size} selected items to…  ›`
+    : 'Move to…  ›';
+  moveButton.setAttribute('aria-haspopup', 'true');
+  const submenu = document.createElement('div');
+  submenu.className = 'outliner-context-submenu';
+  submenu.setAttribute('role', 'menu');
+
+  const destinations: Array<{ id?: string; name: string }> = [
+    { name: 'Root / No Folder' },
+    ...folders
+      .filter(folder => {
+        if (target.kind !== 'folder') return true;
+        return !getFolderDescendantIds(target.folder.id).has(folder.id);
+      })
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+      .map(folder => ({ id: folder.id, name: folder.name }))
+  ];
+
+  for (const destination of destinations) {
+    const option = document.createElement('button');
+    option.className = 'outliner-context-action';
+    option.type = 'button';
+    option.textContent = destination.id ? `📁  ${destination.name}` : '⌂  Root / No Folder';
+    option.setAttribute('role', 'menuitem');
+    option.addEventListener('click', () => {
+      const before = captureOrganization();
+      if (target.kind === 'entity') {
+        const movingEntities = selectedEntities.has(target.entity) && selectedEntities.size > 1
+          ? [...selectedEntities]
+          : [target.entity];
+        for (const entity of movingEntities) entity.folderId = destination.id;
+        recordOrganizationChange(movingEntities.length > 1 ? 'Move selected items to folder' : 'Move item to folder', before);
+      } else {
+        target.folder.parentId = destination.id;
+        recordOrganizationChange('Move folder', before);
+      }
+      closeMenu();
+      refreshOutliner();
+    });
+    submenu.appendChild(option);
+  }
+
+  moveItem.append(moveButton, submenu);
+  moveButton.addEventListener('click', () => moveItem.classList.toggle('submenu-open'));
+  menu.appendChild(moveItem);
+  document.body.appendChild(menu);
+
+  const menuWidth = menu.offsetWidth;
+  const menuHeight = menu.offsetHeight;
+  menu.style.left = `${Math.max(8, Math.min(event.clientX, window.innerWidth - menuWidth - 8))}px`;
+  menu.style.top = `${Math.max(8, Math.min(event.clientY, window.innerHeight - menuHeight - 8))}px`;
+
+  document.addEventListener('pointerdown', onOutsidePointer);
+  document.addEventListener('keydown', onMenuKey);
+}
+
 function refreshOutliner() {
   objectList.innerHTML = '';
   const folderBar = document.createElement('div');
@@ -1045,6 +1148,7 @@ function refreshOutliner() {
   const renderFolder = (folder: ProjectFolder, depth: number) => {
     const row = document.createElement('div');
     row.className = 'outliner-folder-row';
+    row.addEventListener('contextmenu', event => showOutlinerContextMenu(event, { kind: 'folder', folder }));
     row.style.paddingLeft = `${8 + depth * 14}px`;
     const toggle = document.createElement('button');
     toggle.className = 'outliner-folder-toggle';
@@ -1080,6 +1184,7 @@ function refreshOutliner() {
 function renderEntityRow(entity: Entity, depth: number) {
   const entry = document.createElement('button');
   entry.className = `object-entry${selectedEntities.has(entity) ? ' selected' : ''}`;
+  entry.addEventListener('contextmenu', event => showOutlinerContextMenu(event, { kind: 'entity', entity }));
   entry.style.paddingLeft = `${10 + depth * 14}px`;
   const icon = entity.kind === 'mesh' ? '◇' : entity.kind === 'camera' ? '▣' : '☼';
   entry.textContent = `${icon}  ${entity.name}`;
