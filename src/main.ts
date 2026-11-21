@@ -1386,21 +1386,24 @@ function showOutlinerContextMenu(event: MouseEvent, target: OutlinerContextTarge
     const picked = selectedEntities.has(target.entity) && selectedEntities.size > 1
       ? [...selectedEntities]
       : [target.entity];
-    if (picked.length >= 2) {
-      const groupAction = document.createElement('button');
-      groupAction.className = 'outliner-context-action';
-      groupAction.type = 'button';
-      groupAction.textContent = 'Group selected';
-      groupAction.addEventListener('click', () => { closeMenu(); groupSelectedEntities(picked); });
-      menu.appendChild(groupAction);
-      if (picked.every(entity => entity.kind === 'mesh' && entity.object instanceof THREE.Mesh)) {
-        const joinAction = document.createElement('button');
-        joinAction.className = 'outliner-context-action';
-        joinAction.type = 'button';
-        joinAction.textContent = 'Join selected meshes';
-        joinAction.addEventListener('click', () => { closeMenu(); joinSelectedMeshes(picked); });
-        menu.appendChild(joinAction);
-      }
+    const groupAction = document.createElement('button');
+    groupAction.className = 'outliner-context-action';
+    groupAction.type = 'button';
+    groupAction.textContent = picked.length > 1 ? `Group selected (${picked.length})` : 'Group selected (select 2+ objects)';
+    groupAction.disabled = picked.length < 2;
+    groupAction.title = picked.length < 2 ? 'Ctrl-click or Shift-click additional objects in the Outliner first' : 'Create a parent group while keeping the objects individually editable';
+    groupAction.addEventListener('click', () => { closeMenu(); groupSelectedEntities(picked); });
+    menu.appendChild(groupAction);
+
+    const canJoin = picked.length > 1 && picked.every(entity => entity.kind === 'mesh' && entity.object instanceof THREE.Mesh);
+    if (canJoin) {
+      const joinAction = document.createElement('button');
+      joinAction.className = 'outliner-context-action';
+      joinAction.type = 'button';
+      joinAction.textContent = `Join selected meshes (${picked.length})`;
+      joinAction.title = 'Merge the selected mesh geometry into one mesh';
+      joinAction.addEventListener('click', () => { closeMenu(); joinSelectedMeshes(picked); });
+      menu.appendChild(joinAction);
     }
   }
   document.body.appendChild(menu);
