@@ -549,18 +549,32 @@ function registerEntity(object: THREE.Object3D, kind: EntityKind, helper?: THREE
 
 function detachEntity(entity: Entity) {
   clearSelectionTransform();
-  scene.remove(entity.object);
+  entity.object.parent?.remove(entity.object);
   if (entity.helper) scene.remove(entity.helper);
-  if (entity.kind === 'spotLight') scene.remove((entity.object as THREE.SpotLight).target);
+  if (entity.kind === 'spotLight' || entity.kind === 'directionalLight') {
+    (entity.object as THREE.SpotLight | THREE.DirectionalLight).target.parent?.remove((entity.object as THREE.SpotLight | THREE.DirectionalLight).target);
+  }
   const index = entities.indexOf(entity);
   if (index >= 0) entities.splice(index, 1);
 }
 
 function restoreEntity(entity: Entity, index: number) {
   if (!entities.includes(entity)) entities.splice(Math.min(index, entities.length), 0, entity);
-  scene.add(entity.object);
+  const parent = entity.parentGroupId ? entities.find(item => item.id === entity.parentGroupId && item.kind === 'group') : undefined;
+  (parent?.object ?? scene).add(entity.object);
   if (entity.helper) scene.add(entity.helper);
-  if (entity.kind === 'spotLight') scene.add((entity.object as THREE.SpotLight).target);
+  if (entity.kind === 'spotLight' || entity.kind === 'directionalLight') {
+    const target = (entity.object as THREE.SpotLight | THREE.DirectionalLight).target;
+    (parent?.object ?? scene).add(target);
+  }
+  if (entity.kind === 'group') {
+    for (const child of entities) {
+      if (child.parentGroupId === entity.id && child.object.parent !== entity.object) entity.object.add(child.object);
+      if ((child.kind === 'spotLight' || child.kind === 'directionalLight') && child.parentGroupId === entity.id) {
+        entity.object.add((child.object as THREE.SpotLight | THREE.DirectionalLight).target);
+      }
+    }
+  }
   if (entity.kind === 'mesh') applyMeshShadowLayers(entity);
   if (entity.helper && entity.kind === 'spotLight') (entity.helper as THREE.SpotLightHelper).update();
   refreshOutliner();
@@ -898,6 +912,18 @@ function deleteSelected() {
   const targets = [...selectedEntities];
   if (!targets.length && selected) targets.push(selected);
   if (!targets.length) return;
+  const deleteIds = new Set(targets.map(entity => entity.id));
+  let expanded = true;
+  while (expanded) {
+    expanded = false;
+    for (const entity of entities) {
+      if (entity.parentGroupId && deleteIds.has(entity.parentGroupId) && !deleteIds.has(entity.id)) {
+        deleteIds.add(entity.id);
+        targets.push(entity);
+        expanded = true;
+      }
+    }
+  }
   const indexed = targets.map(entity => ({ entity, index: entities.indexOf(entity) })).filter(item => item.index >= 0);
   clearSelectionTransform();
   for (const item of indexed) detachEntity(item.entity);
@@ -1042,10 +1068,6 @@ function getTopLevelGroupCandidates(items: Entity[]): Entity[] {
 function groupSelectedEntities(items: Entity[]) {
   const candidates = getTopLevelGroupCandidates(items);
   if (candidates.length < 2) return;
-  if (candidates.some(item => item.kind === 'group' && item.object === item.object.parent)) {
-    alert('This selection cannot be grouped.');
-    return;
-  }
   clearSelectionTransform();
   for (const entity of candidates) entity.object.updateWorldMatrix(true, true);
   const center = new THREE.Vector3();
@@ -2912,26 +2934,23 @@ async function exportEnvironmentAsGlb() {
     // glTF has no native hemisphere/ambient-light equivalent; export the supported directional sun.
     exportScene.add(sunlight.clone());
 
+    const exportClones = new Map<string, THREE.Object3D>();
     for (const entity of entities) {
       const object = entity.kind === 'group' ? entity.object.clone(false) : entity.object.clone(true);
       object.name = entity.name || object.name || entity.kind;
+      exportClones.set(entity.id, object);
+    }
+    for (const entity of entities) {
+      const object = exportClones.get(entity.id)!;
+      const parentClone = entity.parentGroupId ? exportClones.get(entity.parentGroupId) : undefined;
+      (parentClone ?? exportScene).add(object);
 
-      // GLTF stores a spot light's target as a separate scene node.
-      if (entity.kind === 'spotLight') {
-        const source = entity.object as THREE.SpotLight;
-        const light = object as THREE.SpotLight;
+      // glTF stores directional/spot light targets as separate nodes.
+      if (entity.kind === 'spotLight' || entity.kind === 'directionalLight') {
+        const source = entity.object as THREE.SpotLight | THREE.DirectionalLight;
+        const light = object as THREE.SpotLight | THREE.DirectionalLight;
         light.target = source.target.clone();
-        exportScene.add(light.target);
-      }
-      const parentGroup = entity.parentGroupId
-        ? entities.find(candidate => candidate.id === entity.parentGroupId && candidate.kind === 'group')
-        : undefined;
-      if (parentGroup) {
-        const parentClone = exportScene.getObjectByName(parentGroup.name);
-        if (parentClone) parentClone.add(object);
-        else exportScene.add(object);
-      } else {
-        exportScene.add(object);
+        (parentClone ?? exportScene).add(light.target);
       }
     }
 
