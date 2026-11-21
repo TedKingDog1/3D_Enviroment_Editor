@@ -1380,7 +1380,7 @@ function showOutlinerContextMenu(event: MouseEvent, target: OutlinerContextTarge
       groupAction.textContent = 'Group selected';
       groupAction.addEventListener('click', () => { closeMenu(); groupSelectedEntities(picked); });
       menu.appendChild(groupAction);
-      if (picked.every(entity => entity.kind === 'mesh')) {
+      if (picked.every(entity => entity.kind === 'mesh' && entity.object instanceof THREE.Mesh)) {
         const joinAction = document.createElement('button');
         joinAction.className = 'outliner-context-action';
         joinAction.type = 'button';
@@ -1456,7 +1456,10 @@ function refreshOutliner() {
 function renderEntityRow(entity: Entity, depth: number) {
   const entry = document.createElement('button');
   entry.className = `object-entry${selectedEntities.has(entity) ? ' selected' : ''}`;
-  entry.addEventListener('contextmenu', event => showOutlinerContextMenu(event, { kind: 'entity', entity }));
+  entry.addEventListener('contextmenu', event => {
+    if (!selectedEntities.has(entity)) selectEntity(entity);
+    showOutlinerContextMenu(event, { kind: 'entity', entity });
+  });
   entry.style.paddingLeft = `${10 + depth * 14}px`;
   const icon = entity.kind === 'group' ? '▣' : entity.kind === 'mesh' ? '◇' : entity.kind === 'camera' ? '▣' : '☼';
   entry.textContent = `${icon}  ${entity.name}`;
