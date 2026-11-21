@@ -750,6 +750,15 @@ html[data-theme="system"] :focus-visible {
 #viewport.asset-painting canvas{cursor:crosshair}
 @media(max-width:900px){.asset-paint-toolbar{right:8px;left:8px;top:150px;gap:8px}.asset-paint-toolbar .terrain-toolbar-title{width:100%}.asset-paint-toolbar .terrain-slider input{width:70px}}
 
+/* Outliner right-click context menu and folder destination submenu */
+.outliner-context-menu{position:fixed;z-index:10000;min-width:190px;padding:4px;border:1px solid var(--panel-border);border-radius:6px;background:var(--panel-bg);box-shadow:0 10px 30px rgba(0,0,0,.35);color:var(--ui-text);font-size:11px}
+.outliner-context-item{position:relative}
+.outliner-context-action{display:block;width:100%;padding:8px 10px;border:0;border-radius:4px;background:transparent;color:var(--ui-text);font:inherit;text-align:left;white-space:nowrap;cursor:pointer}
+.outliner-context-action:hover,.outliner-context-action:focus-visible{outline:0;background:var(--control-bg);color:var(--accent)}
+.outliner-context-submenu{position:absolute;top:-4px;left:calc(100% + 4px);display:none;min-width:190px;max-width:260px;max-height:min(420px,70vh);overflow-y:auto;padding:4px;border:1px solid var(--panel-border);border-radius:6px;background:var(--panel-bg);box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.outliner-context-item:hover>.outliner-context-submenu,.outliner-context-item:focus-within>.outliner-context-submenu,.outliner-context-item.submenu-open>.outliner-context-submenu{display:block}
+@media(max-width:600px){.outliner-context-submenu{left:auto;right:0;top:100%}}
+ 
 /* Folder hierarchy and multi-selection */
 .outliner-folder-actions{display:flex;gap:4px;padding:6px 8px;border-bottom:1px solid var(--panel-border)}
 .outliner-folder-actions button{flex:1;padding:5px 3px;border:1px solid var(--panel-border);border-radius:4px;background:var(--control-bg);color:var(--control-text);font-size:9px;cursor:pointer}
