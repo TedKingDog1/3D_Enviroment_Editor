@@ -1273,6 +1273,112 @@ function joinSelectedMeshes(items: Entity[]) {
   }
 }
 
+
+function cloneObjectResources(root: THREE.Object3D) {
+  root.traverse(child => {
+    if (!(child instanceof THREE.Mesh)) return;
+    child.geometry = child.geometry.clone();
+    const cloneMaterial = (material: THREE.Material) => {
+      const copy = material.clone();
+      for (const [key, value] of Object.entries(copy)) {
+        if (value instanceof THREE.Texture) {
+          (copy as unknown as Record<string, unknown>)[key] = value.clone();
+        }
+      }
+      return copy;
+    };
+    child.material = Array.isArray(child.material)
+      ? child.material.map(cloneMaterial)
+      : cloneMaterial(child.material);
+  });
+}
+
+function createDuplicateHelper(entity: Entity, object: THREE.Object3D): THREE.Object3D | undefined {
+  if (entity.kind === 'pointLight') return new THREE.PointLightHelper(object as THREE.PointLight, 0.35);
+  if (entity.kind === 'directionalLight') return new THREE.DirectionalLightHelper(object as THREE.DirectionalLight, 1);
+  if (entity.kind === 'spotLight') return new THREE.SpotLightHelper(object as THREE.SpotLight);
+  if (entity.kind === 'camera') return new THREE.CameraHelper(object as THREE.Camera);
+  return undefined;
+}
+
+function duplicateEntityTree(source: Entity, parentCopy?: Entity): { root: Entity; copies: Entity[] } {
+  const copies: Entity[] = [];
+  const createCopy = (original: Entity, parent?: Entity): Entity => {
+    const object = original.object.clone(original.kind !== 'group');
+    if (original.kind === 'mesh') cloneObjectResources(object);
+    if (original.kind === 'spotLight' || original.kind === 'directionalLight') {
+      const sourceLight = original.object as THREE.SpotLight | THREE.DirectionalLight;
+      const copiedLight = object as THREE.SpotLight | THREE.DirectionalLight;
+      copiedLight.target = sourceLight.target.clone();
+    }
+    object.name = original.name + ' (Copy)';
+    const helper = createDuplicateHelper(original, object);
+    const wasSuspended = historySuspended;
+    historySuspended = true;
+    registerEntity(object, original.kind, helper, false);
+    historySuspended = wasSuspended;
+    const copy = entities[entities.length - 1];
+    copy.name = object.name;
+    copy.folderId = original.folderId;
+    copy.parentGroupId = parent?.id;
+    copy.primitiveType = original.primitiveType;
+    copy.editableMesh = original.editableMesh ? structuredClone(original.editableMesh) : undefined;
+    copy.externalAsset = original.externalAsset ? structuredClone(original.externalAsset) : undefined;
+    copy.lightTransmissionEnabled = original.lightTransmissionEnabled;
+    copy.shadowExcludedLights = new Set(original.shadowExcludedLights ?? []);
+    if (parent) {
+      parent.object.attach(object);
+      if (copy.kind === 'spotLight' || copy.kind === 'directionalLight') {
+        parent.object.attach((object as THREE.SpotLight | THREE.DirectionalLight).target);
+      }
+    } else if (copy.kind === 'spotLight' || copy.kind === 'directionalLight') {
+      scene.add((object as THREE.SpotLight | THREE.DirectionalLight).target);
+    }
+    copies.push(copy);
+    if (original.kind === 'group') {
+      for (const child of entities.filter(item => item.parentGroupId === original.id)) {
+        createCopy(child, copy);
+      }
+    }
+    return copy;
+  };
+
+  const root = createCopy(source, parentCopy);
+  root.object.position.x += 1.5;
+  root.object.updateMatrixWorld(true);
+  for (const copy of copies) {
+    if (copy.kind === 'mesh') applyMeshShadowLayers(copy);
+    if (copy.helper && copy.kind === 'spotLight') (copy.helper as THREE.SpotLightHelper).update();
+  }
+  return { root, copies };
+}
+
+function duplicateEntity(source: Entity) {
+  if (!entities.includes(source)) return;
+  clearSelectionTransform();
+  const parent = source.parentGroupId
+    ? entities.find(item => item.id === source.parentGroupId && item.kind === 'group')
+    : undefined;
+  const { root, copies } = duplicateEntityTree(source, parent);
+  const indexed = copies.map(entity => ({ entity, index: entities.indexOf(entity) }));
+  applySelection([root]);
+  editorHistory.record({
+    label: copies.length > 1 ? 'Duplicate group' : 'Duplicate object',
+    undo: () => {
+      clearSelectionTransform();
+      for (const item of [...indexed].sort((a, b) => b.index - a.index)) detachEntity(item.entity);
+      applySelection([]);
+      refreshOutliner();
+    },
+    redo: () => {
+      for (const item of [...indexed].sort((a, b) => a.index - b.index)) restoreEntity(item.entity, item.index);
+      applySelection([root]);
+    }
+  });
+  refreshHistoryButtons();
+  refreshOutliner();
+}
+
 type OutlinerContextTarget =
   | { kind: 'entity'; entity: Entity }
   | { kind: 'folder'; folder: ProjectFolder };
@@ -1383,6 +1489,17 @@ function showOutlinerContextMenu(event: MouseEvent, target: OutlinerContextTarge
   menu.appendChild(moveItem);
 
   if (target.kind === 'entity') {
+    const duplicateAction = document.createElement('button');
+    duplicateAction.className = 'outliner-context-action';
+    duplicateAction.type = 'button';
+    duplicateAction.textContent = 'Duplicate';
+    duplicateAction.title = 'Create an independent copy of this object or group';
+    duplicateAction.addEventListener('click', () => {
+      closeMenu();
+      duplicateEntity(target.entity);
+    });
+    menu.appendChild(duplicateAction);
+
     const picked = selectedEntities.has(target.entity) && selectedEntities.size > 1
       ? [...selectedEntities]
       : [target.entity];
